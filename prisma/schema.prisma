@@ -1,0 +1,1269 @@
+// ============================================================================
+// Prisma schema — Multi-tenant Restaurant Food Delivery Platform
+// Source: 03-schema-v2(2).sql
+// PostgreSQL + Prisma
+// ============================================================================
+// IMPORTANT:
+// - PostgreSQL RLS policies remain in SQL migrations.
+// - PostgreSQL partial/filtered indexes remain in SQL migrations because
+//   Prisma schema cannot represent WHERE-filtered indexes.
+// - PostgreSQL CHECK constraints not expressible by Prisma remain in SQL.
+// - This schema mirrors the supplied SQL DDL and does not change its business model.
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum StaffRole {
+  TENANT_OWNER
+  BRANCH_MANAGER
+  STAFF
+  CAPTAIN
+  SUPPORT
+
+  @@map("staff_role")
+}
+
+enum FulfillmentType {
+  DELIVERY
+  PICKUP
+
+  @@map("fulfillment_type")
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY
+  OUT_FOR_DELIVERY
+  COMPLETED
+  CANCELLED
+  REJECTED
+
+  @@map("order_status")
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+
+  @@map("payment_status")
+}
+
+enum PaymentAttemptStatus {
+  INITIATED
+  SUCCESS
+  FAILED
+  CANCELLED
+
+  @@map("payment_attempt_status")
+}
+
+enum CartStatus {
+  ACTIVE
+  CONVERTED
+  EXPIRED
+  ABANDONED
+
+  @@map("cart_status")
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FLAT
+  FREE_DELIVERY
+
+  @@map("discount_type")
+}
+
+enum LoyaltyTxnType {
+  EARN
+  REDEEM
+  EXPIRE
+  ADJUST
+
+  @@map("loyalty_txn_type")
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+
+  @@map("review_status")
+}
+
+enum DeliveryStatus {
+  ASSIGNED
+  PICKED_UP
+  DELIVERED
+  FAILED
+
+  @@map("delivery_status")
+}
+
+enum CampaignChannel {
+  PUSH
+  SMS
+  EMAIL
+  WHATSAPP
+
+  @@map("campaign_channel")
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  SENT
+  FAILED
+
+  @@map("campaign_status")
+}
+
+enum RecipientStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+
+  @@map("recipient_status")
+}
+
+enum NotificationChannel {
+  PUSH
+  SMS
+  EMAIL
+  WHATSAPP
+
+  @@map("notification_channel")
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+
+  @@map("notification_status")
+}
+
+model Tenant {
+  id                       String                    @id @db.VarChar(20)
+  name                     String                    @db.VarChar(150)
+  slug                     String                    @unique @db.VarChar(100)
+  logoUrl                  String?                   @map("logo_url") @db.Text
+  isActive                 Boolean                   @default(true) @map("is_active")
+  createdAt                DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime                  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  tenantSetting            TenantSetting?            @relation("TenantSettings_TenantId")
+  branches                 Branch[]                  @relation("Branches_TenantId")
+  branchSettings           BranchSetting[]           @relation("BranchSettings_TenantId")
+  branchOperatingHours     BranchOperatingHour[]     @relation("BranchOperatingHours_TenantId")
+  branchHolidays           BranchHoliday[]           @relation("BranchHolidays_TenantId")
+  deliveryZones            DeliveryZone[]            @relation("DeliveryZones_TenantId")
+  staffUsers               StaffUser[]               @relation("StaffUsers_TenantId")
+  admins                   Admin[]                   @relation("Admins_TenantId")
+  staffBranchAssignments   StaffBranchAssignment[]   @relation("StaffBranchAssignments_TenantId")
+  customers                Customer[]                @relation("Customers_TenantId")
+  customerAddresses        CustomerAddress[]         @relation("CustomerAddresses_TenantId")
+  customerDeviceTokens     CustomerDeviceToken[]     @relation("CustomerDeviceTokens_TenantId")
+  categories               Category[]                @relation("Categories_TenantId")
+  products                 Product[]                 @relation("Products_TenantId")
+  productVariants          ProductVariant[]          @relation("ProductVariants_TenantId")
+  addonGroups              AddonGroup[]              @relation("AddonGroups_TenantId")
+  addonGroupItems          AddonGroupItem[]          @relation("AddonGroupItems_TenantId")
+  productAddonGroups       ProductAddonGroup[]       @relation("ProductAddonGroups_TenantId")
+  branchProducts           BranchProduct[]           @relation("BranchProducts_TenantId")
+  branchVariantOverrides   BranchVariantOverride[]   @relation("BranchVariantOverrides_TenantId")
+  taxRules                 TaxRule[]                 @relation("TaxRules_TenantId")
+  carts                    Cart[]                    @relation("Carts_TenantId")
+  cartItems                CartItem[]                @relation("CartItems_TenantId")
+  cartItemAddons           CartItemAddon[]           @relation("CartItemAddons_TenantId")
+  orders                   Order[]                   @relation("Orders_TenantId")
+  orderItems               OrderItem[]               @relation("OrderItems_TenantId")
+  orderItemAddons          OrderItemAddon[]          @relation("OrderItemAddons_TenantId")
+  orderStatusHistory       OrderStatusHistory[]      @relation("OrderStatusHistory_TenantId")
+  paymentAttempts          PaymentAttempt[]          @relation("PaymentAttempts_TenantId")
+  paymentWebhookEvents     PaymentWebhookEvent[]     @relation("PaymentWebhookEvents_TenantId")
+  refunds                  Refund[]                  @relation("Refunds_TenantId")
+  offers                   Offer[]                   @relation("Offers_TenantId")
+  offerBranches            OfferBranch[]             @relation("OfferBranches_TenantId")
+  offerProducts            OfferProduct[]            @relation("OfferProducts_TenantId")
+  offerCategories          OfferCategory[]           @relation("OfferCategories_TenantId")
+  offerRedemptions         OfferRedemption[]         @relation("OfferRedemptions_TenantId")
+  coupons                  Coupon[]                  @relation("Coupons_TenantId")
+  couponBranches           CouponBranch[]            @relation("CouponBranches_TenantId")
+  couponProducts           CouponProduct[]           @relation("CouponProducts_TenantId")
+  couponCategories         CouponCategory[]          @relation("CouponCategories_TenantId")
+  couponRedemptions        CouponRedemption[]        @relation("CouponRedemptions_TenantId")
+  loyaltyAccounts          LoyaltyAccount[]          @relation("LoyaltyAccounts_TenantId")
+  loyaltyTransactions      LoyaltyTransaction[]      @relation("LoyaltyTransactions_TenantId")
+  customerStats            CustomerStat[]            @relation("CustomerStats_TenantId")
+  campaigns                Campaign[]                @relation("Campaigns_TenantId")
+  campaignRecipients       CampaignRecipient[]       @relation("CampaignRecipients_TenantId")
+  notificationLogs         NotificationLog[]         @relation("NotificationLogs_TenantId")
+  captains                 Captain[]                 @relation("Captains_TenantId")
+  captainBranchAssignments CaptainBranchAssignment[] @relation("CaptainBranchAssignments_TenantId")
+  deliveries               Delivery[]                @relation("Deliveries_TenantId")
+  captainLocations         CaptainLocation[]         @relation("CaptainLocations_TenantId")
+  reviews                  Review[]                  @relation("Reviews_TenantId")
+  banners                  Banner[]                  @relation("Banners_TenantId")
+  dailyBranchSummary       DailyBranchSummary[]      @relation("DailyBranchSummary_TenantId")
+  auditLogs                AuditLog[]                @relation("AuditLogs_TenantId")
+
+  @@map("tenants")
+}
+
+model TenantSetting {
+  tenantId             String   @id @map("tenant_id") @db.VarChar(20)
+  currency             String   @default("INR") @db.VarChar(10)
+  timezone             String   @default("Asia/Kolkata") @db.VarChar(50)
+  deliveryEnabled      Boolean  @default(true) @map("delivery_enabled")
+  pickupEnabled        Boolean  @default(true) @map("pickup_enabled")
+  onlinePaymentEnabled Boolean  @default(true) @map("online_payment_enabled")
+  codEnabled           Boolean  @default(false) @map("cod_enabled")
+  loyaltyEnabled       Boolean  @default(true) @map("loyalty_enabled")
+  offersEnabled        Boolean  @default(true) @map("offers_enabled")
+  updatedAt            DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  tenant               Tenant   @relation("TenantSettings_TenantId", fields: [tenantId], references: [id])
+
+  @@map("tenant_settings")
+}
+
+model Branch {
+  id                       String                    @id @db.VarChar(20)
+  tenantId                 String                    @map("tenant_id") @db.VarChar(20)
+  name                     String                    @db.VarChar(150)
+  addressLine              String                    @map("address_line") @db.Text
+  city                     String?                   @db.VarChar(100)
+  latitude                 Decimal?                  @db.Decimal(10, 7)
+  longitude                Decimal?                  @db.Decimal(10, 7)
+  phone                    String?                   @db.VarChar(20)
+  deliveryEnabled          Boolean                   @default(true) @map("delivery_enabled")
+  pickupEnabled            Boolean                   @default(true) @map("pickup_enabled")
+  isActive                 Boolean                   @default(true) @map("is_active")
+  createdAt                DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime                  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  tenant                   Tenant                    @relation("Branches_TenantId", fields: [tenantId], references: [id])
+  branchSetting            BranchSetting?            @relation("BranchSettings_BranchId")
+  branchOperatingHours     BranchOperatingHour[]     @relation("BranchOperatingHours_BranchId")
+  branchHolidays           BranchHoliday[]           @relation("BranchHolidays_BranchId")
+  deliveryZones            DeliveryZone[]            @relation("DeliveryZones_BranchId")
+  staffBranchAssignments   StaffBranchAssignment[]   @relation("StaffBranchAssignments_BranchId")
+  branchProducts           BranchProduct[]           @relation("BranchProducts_BranchId")
+  branchVariantOverrides   BranchVariantOverride[]   @relation("BranchVariantOverrides_BranchId")
+  carts                    Cart[]                    @relation("Carts_BranchId")
+  orders                   Order[]                   @relation("Orders_BranchId")
+  offerBranches            OfferBranch[]             @relation("OfferBranches_BranchId")
+  couponBranches           CouponBranch[]            @relation("CouponBranches_BranchId")
+  customerStats            CustomerStat[]            @relation("CustomerStats_FavoriteBranchId")
+  captainBranchAssignments CaptainBranchAssignment[] @relation("CaptainBranchAssignments_BranchId")
+  reviews                  Review[]                  @relation("Reviews_BranchId")
+  dailyBranchSummary       DailyBranchSummary[]      @relation("DailyBranchSummary_BranchId")
+
+  @@index([tenantId], map: "idx_branches_tenant")
+  @@map("branches")
+}
+
+model BranchSetting {
+  branchId        String   @id @map("branch_id") @db.VarChar(20)
+  tenantId        String   @map("tenant_id") @db.VarChar(20)
+  minOrderValue   Decimal? @default(0) @map("min_order_value") @db.Decimal(10, 2)
+  packagingCharge Decimal? @default(0) @map("packaging_charge") @db.Decimal(10, 2)
+  updatedAt       DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  branch          Branch   @relation("BranchSettings_BranchId", fields: [branchId], references: [id])
+  tenant          Tenant   @relation("BranchSettings_TenantId", fields: [tenantId], references: [id])
+
+  @@map("branch_settings")
+}
+
+model BranchOperatingHour {
+  id        Int       @id @default(autoincrement())
+  branchId  String    @map("branch_id") @db.VarChar(20)
+  tenantId  String    @map("tenant_id") @db.VarChar(20)
+  dayOfWeek Int       @map("day_of_week") @db.SmallInt
+  opensAt   DateTime? @map("opens_at") @db.Time(6)
+  closesAt  DateTime? @map("closes_at") @db.Time(6)
+  isClosed  Boolean   @default(false) @map("is_closed")
+  branch    Branch    @relation("BranchOperatingHours_BranchId", fields: [branchId], references: [id])
+  tenant    Tenant    @relation("BranchOperatingHours_TenantId", fields: [tenantId], references: [id])
+
+  @@unique([branchId, dayOfWeek])
+  @@map("branch_operating_hours")
+}
+
+model BranchHoliday {
+  id          Int      @id @default(autoincrement())
+  branchId    String   @map("branch_id") @db.VarChar(20)
+  tenantId    String   @map("tenant_id") @db.VarChar(20)
+  holidayDate DateTime @map("holiday_date") @db.Date
+  reason      String?  @db.VarChar(150)
+  branch      Branch   @relation("BranchHolidays_BranchId", fields: [branchId], references: [id])
+  tenant      Tenant   @relation("BranchHolidays_TenantId", fields: [tenantId], references: [id])
+
+  @@unique([branchId, holidayDate])
+  @@map("branch_holidays")
+}
+
+model DeliveryZone {
+  id            Int      @id @default(autoincrement())
+  branchId      String   @map("branch_id") @db.VarChar(20)
+  tenantId      String   @map("tenant_id") @db.VarChar(20)
+  name          String?  @db.VarChar(100)
+  maxRadiusKm   Decimal? @map("max_radius_km") @db.Decimal(6, 2)
+  deliveryFee   Decimal  @default(0) @map("delivery_fee") @db.Decimal(10, 2)
+  minOrderValue Decimal? @default(0) @map("min_order_value") @db.Decimal(10, 2)
+  isActive      Boolean  @default(true) @map("is_active")
+  branch        Branch   @relation("DeliveryZones_BranchId", fields: [branchId], references: [id])
+  tenant        Tenant   @relation("DeliveryZones_TenantId", fields: [tenantId], references: [id])
+
+  @@index([branchId], map: "idx_delivery_zones_branch")
+  @@map("delivery_zones")
+}
+
+model Admin {
+  id           Int      @id @default(autoincrement())
+  tenantId     String   @map("tenant_id") @db.VarChar(20)
+  username     String   @unique @db.VarChar(50)
+  passwordHash String   @map("password_hash") @db.Text
+  name         String   @db.VarChar(150)
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  tenant       Tenant   @relation("Admins_TenantId", fields: [tenantId], references: [id])
+
+  @@index([tenantId], map: "idx_admins_tenant")
+  @@map("admins")
+}
+
+model StaffUser {
+  id                     Int                     @id @default(autoincrement())
+  tenantId               String                  @map("tenant_id") @db.VarChar(20)
+  fullName               String                  @map("full_name") @db.VarChar(150)
+  phone                  String                  @db.VarChar(20)
+  email                  String?                 @db.VarChar(150)
+  passwordHash           String                  @map("password_hash") @db.Text
+  role                   StaffRole
+  isActive               Boolean                 @default(true) @map("is_active")
+  createdAt              DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant                 Tenant                  @relation("StaffUsers_TenantId", fields: [tenantId], references: [id])
+  staffBranchAssignments StaffBranchAssignment[] @relation("StaffBranchAssignments_StaffId")
+  orderStatusHistory     OrderStatusHistory[]    @relation("OrderStatusHistory_ChangedBy")
+  offers                 Offer[]                 @relation("Offers_CreatedBy")
+  coupons                Coupon[]                @relation("Coupons_CreatedBy")
+  campaigns              Campaign[]              @relation("Campaigns_CreatedBy")
+  notificationLogs       NotificationLog[]       @relation("NotificationLogs_StaffId")
+  captain                Captain?                @relation("Captains_Id")
+  auditLogs              AuditLog[]              @relation("AuditLogs_ActorStaffId")
+
+  @@unique([tenantId, phone])
+  @@index([tenantId], map: "idx_staff_tenant")
+  @@map("staff_users")
+}
+
+model StaffBranchAssignment {
+  id        Int       @id @default(autoincrement())
+  staffId   Int       @map("staff_id")
+  branchId  String    @map("branch_id") @db.VarChar(20)
+  tenantId  String    @map("tenant_id") @db.VarChar(20)
+  staffUser StaffUser @relation("StaffBranchAssignments_StaffId", fields: [staffId], references: [id])
+  branch    Branch    @relation("StaffBranchAssignments_BranchId", fields: [branchId], references: [id])
+  tenant    Tenant    @relation("StaffBranchAssignments_TenantId", fields: [tenantId], references: [id])
+
+  @@unique([staffId, branchId])
+  @@map("staff_branch_assignments")
+}
+
+model Customer {
+  id                   Int                   @id @default(autoincrement())
+  tenantId             String                @map("tenant_id") @db.VarChar(20)
+  fullName             String?               @map("full_name") @db.VarChar(150)
+  phone                String                @db.VarChar(20)
+  dateOfBirth          DateTime?             @map("date_of_birth") @db.Date
+  email                String?               @db.VarChar(150)
+  passwordHash         String?               @map("password_hash") @db.Text
+  referralCode         String?               @map("referral_code") @db.VarChar(20)
+  referredBy           Int?                  @map("referred_by")
+  isActive             Boolean               @default(true) @map("is_active")
+  deletedAt            DateTime?             @map("deleted_at") @db.Timestamptz(6)
+  createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime              @default(now()) @map("updated_at") @db.Timestamptz(6)
+  tenant               Tenant                @relation("Customers_TenantId", fields: [tenantId], references: [id])
+  customer             Customer?             @relation("Customers_ReferredBy", fields: [referredBy], references: [id])
+  customersReferredBy  Customer[]            @relation("Customers_ReferredBy")
+  customerAddresses    CustomerAddress[]     @relation("CustomerAddresses_CustomerId")
+  customerDeviceTokens CustomerDeviceToken[] @relation("CustomerDeviceTokens_CustomerId")
+  carts                Cart[]                @relation("Carts_CustomerId")
+  orders               Order[]               @relation("Orders_CustomerId")
+  offerRedemptions     OfferRedemption[]     @relation("OfferRedemptions_CustomerId")
+  couponRedemptions    CouponRedemption[]    @relation("CouponRedemptions_CustomerId")
+  loyaltyAccounts      LoyaltyAccount[]      @relation("LoyaltyAccounts_CustomerId")
+  customerStats        CustomerStat[]        @relation("CustomerStats_CustomerId")
+  campaignRecipients   CampaignRecipient[]   @relation("CampaignRecipients_CustomerId")
+  notificationLogs     NotificationLog[]     @relation("NotificationLogs_CustomerId")
+  reviews              Review[]              @relation("Reviews_CustomerId")
+
+  @@unique([tenantId, phone])
+  @@index([tenantId], map: "idx_customers_tenant")
+  @@map("customers")
+}
+
+model CustomerAddress {
+  id          Int      @id @default(autoincrement())
+  customerId  Int      @map("customer_id")
+  tenantId    String   @map("tenant_id") @db.VarChar(20)
+  label       String?  @db.VarChar(50)
+  addressLine String   @map("address_line") @db.Text
+  landmark    String?  @db.VarChar(150)
+  latitude    Decimal? @db.Decimal(10, 7)
+  longitude   Decimal? @db.Decimal(10, 7)
+  isDefault   Boolean  @default(false) @map("is_default")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  customer    Customer @relation("CustomerAddresses_CustomerId", fields: [customerId], references: [id])
+  tenant      Tenant   @relation("CustomerAddresses_TenantId", fields: [tenantId], references: [id])
+
+  @@index([customerId], map: "idx_customer_addresses_customer")
+  @@map("customer_addresses")
+}
+
+model CustomerDeviceToken {
+  id          Int      @id @default(autoincrement())
+  customerId  Int      @map("customer_id")
+  tenantId    String   @map("tenant_id") @db.VarChar(20)
+  deviceToken String   @map("device_token") @db.Text
+  platform    String?  @db.VarChar(20)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  customer    Customer @relation("CustomerDeviceTokens_CustomerId", fields: [customerId], references: [id])
+  tenant      Tenant   @relation("CustomerDeviceTokens_TenantId", fields: [tenantId], references: [id])
+
+  @@unique([customerId, deviceToken])
+  @@map("customer_device_tokens")
+}
+
+model Category {
+  id                       Int              @id @default(autoincrement())
+  tenantId                 String           @map("tenant_id") @db.VarChar(20)
+  parentCategoryId         Int?             @map("parent_category_id")
+  name                     String           @db.VarChar(100)
+  displayOrder             Int              @default(0) @map("display_order")
+  isActive                 Boolean          @default(true) @map("is_active")
+  tenant                   Tenant           @relation("Categories_TenantId", fields: [tenantId], references: [id])
+  category                 Category?        @relation("Categories_ParentCategoryId", fields: [parentCategoryId], references: [id])
+  categoriesParentCategory Category[]       @relation("Categories_ParentCategoryId")
+  products                 Product[]        @relation("Products_CategoryId")
+  taxRules                 TaxRule[]        @relation("TaxRules_CategoryId")
+  offerCategories          OfferCategory[]  @relation("OfferCategories_CategoryId")
+  couponCategories         CouponCategory[] @relation("CouponCategories_CategoryId")
+
+  @@index([tenantId], map: "idx_categories_tenant")
+  @@map("categories")
+}
+
+model Product {
+  id                 Int                 @id @default(autoincrement())
+  tenantId           String              @map("tenant_id") @db.VarChar(20)
+  categoryId         Int?                @map("category_id")
+  name               String              @db.VarChar(150)
+  description        String?             @db.Text
+  imageUrl           String?             @map("image_url") @db.Text
+  basePrice          Decimal             @map("base_price") @db.Decimal(10, 2)
+  isVeg              Boolean             @default(true) @map("is_veg")
+  isRecommended      Boolean             @default(false) @map("is_recommended")
+  isBestSeller       Boolean             @default(false) @map("is_best_seller")
+  displayOrder       Int                 @default(0) @map("display_order")
+  isActive           Boolean             @default(true) @map("is_active")
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime            @default(now()) @map("updated_at") @db.Timestamptz(6)
+  tenant             Tenant              @relation("Products_TenantId", fields: [tenantId], references: [id])
+  category           Category?           @relation("Products_CategoryId", fields: [categoryId], references: [id])
+  productVariants    ProductVariant[]    @relation("ProductVariants_ProductId")
+  productAddonGroups ProductAddonGroup[] @relation("ProductAddonGroups_ProductId")
+  branchProducts     BranchProduct[]     @relation("BranchProducts_ProductId")
+  taxRules           TaxRule[]           @relation("TaxRules_ProductId")
+  cartItems          CartItem[]          @relation("CartItems_ProductId")
+  orderItems         OrderItem[]         @relation("OrderItems_ProductId")
+  offerProducts      OfferProduct[]      @relation("OfferProducts_ProductId")
+  couponProducts     CouponProduct[]     @relation("CouponProducts_ProductId")
+  customerStats      CustomerStat[]      @relation("CustomerStats_FavoriteProductId")
+  reviews            Review[]            @relation("Reviews_ProductId")
+
+  @@index([tenantId], map: "idx_products_tenant")
+  @@index([categoryId], map: "idx_products_category")
+  @@map("products")
+}
+
+model ProductVariant {
+  id                     Int                     @id @default(autoincrement())
+  productId              Int                     @map("product_id")
+  tenantId               String                  @map("tenant_id") @db.VarChar(20)
+  name                   String                  @db.VarChar(100)
+  price                  Decimal                 @db.Decimal(10, 2)
+  isActive               Boolean                 @default(true) @map("is_active")
+  displayOrder           Int                     @default(0) @map("display_order")
+  product                Product                 @relation("ProductVariants_ProductId", fields: [productId], references: [id])
+  tenant                 Tenant                  @relation("ProductVariants_TenantId", fields: [tenantId], references: [id])
+  branchVariantOverrides BranchVariantOverride[] @relation("BranchVariantOverrides_VariantId")
+  cartItems              CartItem[]              @relation("CartItems_VariantId")
+  orderItems             OrderItem[]             @relation("OrderItems_VariantId")
+
+  @@index([productId], map: "idx_variants_product")
+  @@map("product_variants")
+}
+
+model AddonGroup {
+  id                 Int                 @id @default(autoincrement())
+  tenantId           String              @map("tenant_id") @db.VarChar(20)
+  name               String              @db.VarChar(100)
+  minSelect          Int                 @default(0) @map("min_select")
+  maxSelect          Int                 @default(1) @map("max_select")
+  isRequired         Boolean             @default(false) @map("is_required")
+  tenant             Tenant              @relation("AddonGroups_TenantId", fields: [tenantId], references: [id])
+  addonGroupItems    AddonGroupItem[]    @relation("AddonGroupItems_AddonGroupId")
+  productAddonGroups ProductAddonGroup[] @relation("ProductAddonGroups_AddonGroupId")
+
+  @@index([tenantId], map: "idx_addon_groups_tenant")
+  @@map("addon_groups")
+}
+
+model AddonGroupItem {
+  id             Int             @id @default(autoincrement())
+  addonGroupId   Int             @map("addon_group_id")
+  tenantId       String          @map("tenant_id") @db.VarChar(20)
+  name           String          @db.VarChar(100)
+  price          Decimal         @default(0) @db.Decimal(10, 2)
+  isActive       Boolean         @default(true) @map("is_active")
+  addonGroup     AddonGroup      @relation("AddonGroupItems_AddonGroupId", fields: [addonGroupId], references: [id])
+  tenant         Tenant          @relation("AddonGroupItems_TenantId", fields: [tenantId], references: [id])
+  cartItemAddons CartItemAddon[] @relation("CartItemAddons_AddonItemId")
+
+  @@index([addonGroupId], map: "idx_addon_items_group")
+  @@map("addon_group_items")
+}
+
+model ProductAddonGroup {
+  id           Int        @id @default(autoincrement())
+  productId    Int        @map("product_id")
+  addonGroupId Int        @map("addon_group_id")
+  tenantId     String     @map("tenant_id") @db.VarChar(20)
+  product      Product    @relation("ProductAddonGroups_ProductId", fields: [productId], references: [id])
+  addonGroup   AddonGroup @relation("ProductAddonGroups_AddonGroupId", fields: [addonGroupId], references: [id])
+  tenant       Tenant     @relation("ProductAddonGroups_TenantId", fields: [tenantId], references: [id])
+
+  @@unique([productId, addonGroupId])
+  @@map("product_addon_groups")
+}
+
+model BranchProduct {
+  id            Int      @id @default(autoincrement())
+  branchId      String   @map("branch_id") @db.VarChar(20)
+  productId     Int      @map("product_id")
+  tenantId      String   @map("tenant_id") @db.VarChar(20)
+  priceOverride Decimal? @map("price_override") @db.Decimal(10, 2)
+  stockQuantity Int?     @map("stock_quantity")
+  isAvailable   Boolean  @default(true) @map("is_available")
+  displayOrder  Int      @default(0) @map("display_order")
+  updatedAt     DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  branch        Branch   @relation("BranchProducts_BranchId", fields: [branchId], references: [id])
+  product       Product  @relation("BranchProducts_ProductId", fields: [productId], references: [id])
+  tenant        Tenant   @relation("BranchProducts_TenantId", fields: [tenantId], references: [id])
+
+  @@unique([branchId, productId])
+  @@index([branchId], map: "idx_branch_products_branch")
+  @@index([productId], map: "idx_branch_products_product")
+  @@map("branch_products")
+}
+
+model BranchVariantOverride {
+  id             Int            @id @default(autoincrement())
+  branchId       String         @map("branch_id") @db.VarChar(20)
+  variantId      Int            @map("variant_id")
+  tenantId       String         @map("tenant_id") @db.VarChar(20)
+  priceOverride  Decimal?       @map("price_override") @db.Decimal(10, 2)
+  isAvailable    Boolean        @default(true) @map("is_available")
+  branch         Branch         @relation("BranchVariantOverrides_BranchId", fields: [branchId], references: [id])
+  productVariant ProductVariant @relation("BranchVariantOverrides_VariantId", fields: [variantId], references: [id])
+  tenant         Tenant         @relation("BranchVariantOverrides_TenantId", fields: [tenantId], references: [id])
+
+  @@unique([branchId, variantId])
+  @@map("branch_variant_overrides")
+}
+
+model TaxRule {
+  id             Int       @id @default(autoincrement())
+  tenantId       String    @map("tenant_id") @db.VarChar(20)
+  name           String    @db.VarChar(100)
+  categoryId     Int?      @map("category_id")
+  productId      Int?      @map("product_id")
+  cgstPercentage Decimal   @default(0) @map("cgst_percentage") @db.Decimal(5, 2)
+  sgstPercentage Decimal   @default(0) @map("sgst_percentage") @db.Decimal(5, 2)
+  igstPercentage Decimal   @default(0) @map("igst_percentage") @db.Decimal(5, 2)
+  effectiveFrom  DateTime  @default(now()) @map("effective_from") @db.Timestamptz(6)
+  effectiveTo    DateTime? @map("effective_to") @db.Timestamptz(6)
+  isDefault      Boolean   @default(false) @map("is_default")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant         Tenant    @relation("TaxRules_TenantId", fields: [tenantId], references: [id])
+  category       Category? @relation("TaxRules_CategoryId", fields: [categoryId], references: [id])
+  product        Product?  @relation("TaxRules_ProductId", fields: [productId], references: [id])
+
+  @@index([tenantId], map: "idx_tax_rules_tenant")
+  @@index([tenantId, productId, categoryId, effectiveFrom, effectiveTo], map: "idx_tax_rules_lookup")
+  @@map("tax_rules")
+}
+
+model Cart {
+  id              Int             @id @default(autoincrement())
+  tenantId        String          @map("tenant_id") @db.VarChar(20)
+  customerId      Int             @map("customer_id")
+  branchId        String          @map("branch_id") @db.VarChar(20)
+  fulfillmentType FulfillmentType @map("fulfillment_type")
+  status          CartStatus      @default(ACTIVE)
+  expiresAt       DateTime?       @map("expires_at") @db.Timestamptz(6)
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime        @default(now()) @map("updated_at") @db.Timestamptz(6)
+  tenant          Tenant          @relation("Carts_TenantId", fields: [tenantId], references: [id])
+  customer        Customer        @relation("Carts_CustomerId", fields: [customerId], references: [id])
+  branch          Branch          @relation("Carts_BranchId", fields: [branchId], references: [id])
+  cartItems       CartItem[]      @relation("CartItems_CartId")
+
+  @@map("carts")
+}
+
+model CartItem {
+  id             Int             @id @default(autoincrement())
+  cartId         Int             @map("cart_id")
+  tenantId       String          @map("tenant_id") @db.VarChar(20)
+  productId      Int             @map("product_id")
+  variantId      Int?            @map("variant_id")
+  quantity       Int
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  cart           Cart            @relation("CartItems_CartId", fields: [cartId], references: [id])
+  tenant         Tenant          @relation("CartItems_TenantId", fields: [tenantId], references: [id])
+  product        Product         @relation("CartItems_ProductId", fields: [productId], references: [id])
+  productVariant ProductVariant? @relation("CartItems_VariantId", fields: [variantId], references: [id])
+  cartItemAddons CartItemAddon[] @relation("CartItemAddons_CartItemId")
+
+  @@index([cartId], map: "idx_cart_items_cart")
+  @@map("cart_items")
+}
+
+model CartItemAddon {
+  id             Int            @id @default(autoincrement())
+  cartItemId     Int            @map("cart_item_id")
+  addonItemId    Int            @map("addon_item_id")
+  tenantId       String         @map("tenant_id") @db.VarChar(20)
+  quantity       Int            @default(1)
+  cartItem       CartItem       @relation("CartItemAddons_CartItemId", fields: [cartItemId], references: [id])
+  addonGroupItem AddonGroupItem @relation("CartItemAddons_AddonItemId", fields: [addonItemId], references: [id])
+  tenant         Tenant         @relation("CartItemAddons_TenantId", fields: [tenantId], references: [id])
+
+  @@map("cart_item_addons")
+}
+
+model Order {
+  id                    Int                  @id @default(autoincrement())
+  tenantId              String               @map("tenant_id") @db.VarChar(20)
+  branchId              String               @map("branch_id") @db.VarChar(20)
+  customerId            Int                  @map("customer_id")
+  orderNumber           String               @map("order_number") @db.VarChar(30)
+  fulfillmentType       FulfillmentType      @map("fulfillment_type")
+  status                OrderStatus          @default(PENDING)
+  paymentStatus         PaymentStatus        @default(PENDING) @map("payment_status")
+  idempotencyKey        String?              @map("idempotency_key") @db.VarChar(36)
+  subtotal              Decimal              @db.Decimal(10, 2)
+  discountAmount        Decimal              @default(0) @map("discount_amount") @db.Decimal(10, 2)
+  packagingCharge       Decimal              @default(0) @map("packaging_charge") @db.Decimal(10, 2)
+  deliveryCharge        Decimal              @default(0) @map("delivery_charge") @db.Decimal(10, 2)
+  cgstAmount            Decimal              @default(0) @map("cgst_amount") @db.Decimal(10, 2)
+  sgstAmount            Decimal              @default(0) @map("sgst_amount") @db.Decimal(10, 2)
+  igstAmount            Decimal              @default(0) @map("igst_amount") @db.Decimal(10, 2)
+  loyaltyPointsUsed     Int                  @default(0) @map("loyalty_points_used")
+  loyaltyDiscountAmount Decimal              @default(0) @map("loyalty_discount_amount") @db.Decimal(10, 2)
+  totalAmount           Decimal              @map("total_amount") @db.Decimal(10, 2)
+  appliedOfferId        Int?                 @map("applied_offer_id")
+  appliedCouponId       Int?                 @map("applied_coupon_id")
+  deliveryAddressLine   String?              @map("delivery_address_line") @db.Text
+  deliveryLandmark      String?              @map("delivery_landmark") @db.VarChar(150)
+  deliveryLatitude      Decimal?             @map("delivery_latitude") @db.Decimal(10, 7)
+  deliveryLongitude     Decimal?             @map("delivery_longitude") @db.Decimal(10, 7)
+  deliveryPhone         String?              @map("delivery_phone") @db.VarChar(20)
+  notes                 String?              @db.Text
+  cancelReason          String?              @map("cancel_reason") @db.Text
+  rejectionReason       String?              @map("rejection_reason") @db.Text
+  placedAt              DateTime             @default(now()) @map("placed_at") @db.Timestamptz(6)
+  confirmedAt           DateTime?            @map("confirmed_at") @db.Timestamptz(6)
+  readyAt               DateTime?            @map("ready_at") @db.Timestamptz(6)
+  completedAt           DateTime?            @map("completed_at") @db.Timestamptz(6)
+  createdAt             DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  cancelledAt           DateTime?            @map("cancelled_at") @db.Timestamptz(6)
+  tenant                Tenant               @relation("Orders_TenantId", fields: [tenantId], references: [id])
+  branch                Branch               @relation("Orders_BranchId", fields: [branchId], references: [id])
+  customer              Customer             @relation("Orders_CustomerId", fields: [customerId], references: [id])
+  offer                 Offer?               @relation("Orders_AppliedOfferId", fields: [appliedOfferId], references: [id])
+  coupon                Coupon?              @relation("Orders_AppliedCouponId", fields: [appliedCouponId], references: [id])
+  orderItems            OrderItem[]          @relation("OrderItems_OrderId")
+  orderStatusHistory    OrderStatusHistory[] @relation("OrderStatusHistory_OrderId")
+  paymentAttempts       PaymentAttempt[]     @relation("PaymentAttempts_OrderId")
+  refunds               Refund[]             @relation("Refunds_OrderId")
+  offerRedemptions      OfferRedemption[]    @relation("OfferRedemptions_OrderId")
+  couponRedemptions     CouponRedemption[]   @relation("CouponRedemptions_OrderId")
+  loyaltyTransactions   LoyaltyTransaction[] @relation("LoyaltyTransactions_OrderId")
+  delivery              Delivery?            @relation("Deliveries_OrderId")
+  reviews               Review[]             @relation("Reviews_OrderId")
+
+  @@unique([tenantId, orderNumber])
+  @@unique([tenantId, customerId, idempotencyKey])
+  @@index([tenantId, branchId, status], map: "idx_orders_tenant_branch_status")
+  @@index([tenantId, customerId], map: "idx_orders_tenant_customer")
+  @@index([tenantId, placedAt], map: "idx_orders_placed_at")
+  @@index([tenantId, branchId, placedAt(sort: Desc)], map: "idx_orders_branch_time")
+  @@index([tenantId, status, placedAt(sort: Desc)], map: "idx_orders_status_time")
+  @@map("orders")
+}
+
+model OrderItem {
+  id                     Int              @id @default(autoincrement())
+  orderId                Int              @map("order_id")
+  tenantId               String           @map("tenant_id") @db.VarChar(20)
+  productId              Int?             @map("product_id")
+  variantId              Int?             @map("variant_id")
+  productNameSnapshot    String           @map("product_name_snapshot") @db.VarChar(150)
+  variantNameSnapshot    String?          @map("variant_name_snapshot") @db.VarChar(100)
+  quantity               Int
+  unitPrice              Decimal          @map("unit_price") @db.Decimal(10, 2)
+  discountAmount         Decimal          @default(0) @map("discount_amount") @db.Decimal(10, 2)
+  cgstPercentageSnapshot Decimal          @default(0) @map("cgst_percentage_snapshot") @db.Decimal(5, 2)
+  sgstPercentageSnapshot Decimal          @default(0) @map("sgst_percentage_snapshot") @db.Decimal(5, 2)
+  igstPercentageSnapshot Decimal          @default(0) @map("igst_percentage_snapshot") @db.Decimal(5, 2)
+  cgstAmount             Decimal          @default(0) @map("cgst_amount") @db.Decimal(10, 2)
+  sgstAmount             Decimal          @default(0) @map("sgst_amount") @db.Decimal(10, 2)
+  igstAmount             Decimal          @default(0) @map("igst_amount") @db.Decimal(10, 2)
+  lineTotal              Decimal          @map("line_total") @db.Decimal(10, 2)
+  order                  Order            @relation("OrderItems_OrderId", fields: [orderId], references: [id])
+  tenant                 Tenant           @relation("OrderItems_TenantId", fields: [tenantId], references: [id])
+  product                Product?         @relation("OrderItems_ProductId", fields: [productId], references: [id])
+  productVariant         ProductVariant?  @relation("OrderItems_VariantId", fields: [variantId], references: [id])
+  orderItemAddons        OrderItemAddon[] @relation("OrderItemAddons_OrderItemId")
+
+  @@index([orderId], map: "idx_order_items_order")
+  @@index([tenantId, productId], map: "idx_order_items_product")
+  @@map("order_items")
+}
+
+model OrderItemAddon {
+  id                Int       @id @default(autoincrement())
+  orderItemId       Int       @map("order_item_id")
+  tenantId          String    @map("tenant_id") @db.VarChar(20)
+  addonNameSnapshot String    @map("addon_name_snapshot") @db.VarChar(100)
+  priceSnapshot     Decimal   @map("price_snapshot") @db.Decimal(10, 2)
+  quantity          Int       @default(1)
+  orderItem         OrderItem @relation("OrderItemAddons_OrderItemId", fields: [orderItemId], references: [id])
+  tenant            Tenant    @relation("OrderItemAddons_TenantId", fields: [tenantId], references: [id])
+
+  @@map("order_item_addons")
+}
+
+model OrderStatusHistory {
+  id        Int         @id @default(autoincrement())
+  orderId   Int         @map("order_id")
+  tenantId  String      @map("tenant_id") @db.VarChar(20)
+  status    OrderStatus
+  changedBy Int?        @map("changed_by")
+  note      String?     @db.Text
+  changedAt DateTime    @default(now()) @map("changed_at") @db.Timestamptz(6)
+  order     Order       @relation("OrderStatusHistory_OrderId", fields: [orderId], references: [id])
+  tenant    Tenant      @relation("OrderStatusHistory_TenantId", fields: [tenantId], references: [id])
+  staffUser StaffUser?  @relation("OrderStatusHistory_ChangedBy", fields: [changedBy], references: [id])
+
+  @@index([orderId], map: "idx_order_status_history_order")
+  @@index([tenantId, changedAt(sort: Desc)], map: "idx_order_status_history_tenant_time")
+  @@map("order_status_history")
+}
+
+model PaymentAttempt {
+  id               Int                  @id @default(autoincrement())
+  orderId          Int                  @map("order_id")
+  tenantId         String               @map("tenant_id") @db.VarChar(20)
+  gateway          String               @db.VarChar(30)
+  gatewayOrderId   String?              @map("gateway_order_id") @db.VarChar(150)
+  gatewayPaymentId String?              @map("gateway_payment_id") @db.VarChar(150)
+  amount           Decimal              @db.Decimal(10, 2)
+  method           String?              @db.VarChar(30)
+  status           PaymentAttemptStatus @default(INITIATED)
+  createdAt        DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime             @default(now()) @map("updated_at") @db.Timestamptz(6)
+  order            Order                @relation("PaymentAttempts_OrderId", fields: [orderId], references: [id])
+  tenant           Tenant               @relation("PaymentAttempts_TenantId", fields: [tenantId], references: [id])
+  refunds          Refund[]             @relation("Refunds_PaymentAttemptId")
+
+  @@index([orderId], map: "idx_payment_attempts_order")
+  @@index([tenantId, status, createdAt(sort: Desc)], map: "idx_payment_attempts_tenant_status")
+  @@map("payment_attempts")
+}
+
+model PaymentWebhookEvent {
+  id             Int       @id @default(autoincrement())
+  tenantId       String?   @map("tenant_id") @db.VarChar(20)
+  gateway        String    @db.VarChar(30)
+  gatewayEventId String    @map("gateway_event_id") @db.VarChar(150)
+  payload        Json      @db.JsonB
+  processedAt    DateTime? @map("processed_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant         Tenant?   @relation("PaymentWebhookEvents_TenantId", fields: [tenantId], references: [id])
+
+  @@unique([gateway, gatewayEventId])
+  @@map("payment_webhook_events")
+}
+
+model Refund {
+  id               Int            @id @default(autoincrement())
+  paymentAttemptId Int            @map("payment_attempt_id")
+  tenantId         String         @map("tenant_id") @db.VarChar(20)
+  orderId          Int            @map("order_id")
+  amount           Decimal        @db.Decimal(10, 2)
+  reason           String?        @db.Text
+  gatewayRefundId  String?        @map("gateway_refund_id") @db.VarChar(150)
+  status           String         @default("INITIATED") @db.VarChar(20)
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  paymentAttempt   PaymentAttempt @relation("Refunds_PaymentAttemptId", fields: [paymentAttemptId], references: [id])
+  tenant           Tenant         @relation("Refunds_TenantId", fields: [tenantId], references: [id])
+  order            Order          @relation("Refunds_OrderId", fields: [orderId], references: [id])
+
+  @@index([orderId], map: "idx_refunds_order")
+  @@map("refunds")
+}
+
+model Offer {
+  id                    Int               @id @default(autoincrement())
+  tenantId              String            @map("tenant_id") @db.VarChar(20)
+  title                 String            @db.VarChar(150)
+  description           String?           @db.Text
+  bannerImageUrl        String?           @map("banner_image_url") @db.Text
+  discountType          DiscountType      @map("discount_type")
+  discountValue         Decimal           @map("discount_value") @db.Decimal(10, 2)
+  minOrderValue         Decimal           @default(0) @map("min_order_value") @db.Decimal(10, 2)
+  maxDiscountAmount     Decimal?          @map("max_discount_amount") @db.Decimal(10, 2)
+  usageLimit            Int?              @map("usage_limit")
+  perCustomerUsageLimit Int               @default(1) @map("per_customer_usage_limit")
+  targetSegment         String            @default("ALL") @map("target_segment") @db.VarChar(30)
+  validFrom             DateTime          @map("valid_from") @db.Timestamptz(6)
+  validTo               DateTime          @map("valid_to") @db.Timestamptz(6)
+  isPopup               Boolean           @default(false) @map("is_popup")
+  isActive              Boolean           @default(true) @map("is_active")
+  createdBy             Int?              @map("created_by")
+  createdAt             DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant                Tenant            @relation("Offers_TenantId", fields: [tenantId], references: [id])
+  staffUser             StaffUser?        @relation("Offers_CreatedBy", fields: [createdBy], references: [id])
+  orders                Order[]           @relation("Orders_AppliedOfferId")
+  offerBranches         OfferBranch[]     @relation("OfferBranches_OfferId")
+  offerProducts         OfferProduct[]    @relation("OfferProducts_OfferId")
+  offerCategories       OfferCategory[]   @relation("OfferCategories_OfferId")
+  offerRedemptions      OfferRedemption[] @relation("OfferRedemptions_OfferId")
+
+  @@map("offers")
+}
+
+model OfferBranch {
+  tenantId String @map("tenant_id") @db.VarChar(20)
+  offerId  Int    @map("offer_id")
+  branchId String @map("branch_id") @db.VarChar(20)
+  tenant   Tenant @relation("OfferBranches_TenantId", fields: [tenantId], references: [id])
+  offer    Offer  @relation("OfferBranches_OfferId", fields: [offerId], references: [id])
+  branch   Branch @relation("OfferBranches_BranchId", fields: [branchId], references: [id])
+
+  @@id([offerId, branchId])
+  @@unique([offerId, branchId])
+  @@unique([tenantId, offerId, branchId])
+  @@map("offer_branches")
+}
+
+model OfferProduct {
+  tenantId  String  @map("tenant_id") @db.VarChar(20)
+  offerId   Int     @map("offer_id")
+  productId Int     @map("product_id")
+  tenant    Tenant  @relation("OfferProducts_TenantId", fields: [tenantId], references: [id])
+  offer     Offer   @relation("OfferProducts_OfferId", fields: [offerId], references: [id])
+  product   Product @relation("OfferProducts_ProductId", fields: [productId], references: [id])
+
+  @@id([offerId, productId])
+  @@unique([offerId, productId])
+  @@unique([tenantId, offerId, productId])
+  @@map("offer_products")
+}
+
+model OfferCategory {
+  tenantId   String   @map("tenant_id") @db.VarChar(20)
+  offerId    Int      @map("offer_id")
+  categoryId Int      @map("category_id")
+  tenant     Tenant   @relation("OfferCategories_TenantId", fields: [tenantId], references: [id])
+  offer      Offer    @relation("OfferCategories_OfferId", fields: [offerId], references: [id])
+  category   Category @relation("OfferCategories_CategoryId", fields: [categoryId], references: [id])
+
+  @@id([offerId, categoryId])
+  @@unique([offerId, categoryId])
+  @@unique([tenantId, offerId, categoryId])
+  @@map("offer_categories")
+}
+
+model OfferRedemption {
+  id             Int      @id @default(autoincrement())
+  offerId        Int      @map("offer_id")
+  tenantId       String   @map("tenant_id") @db.VarChar(20)
+  orderId        Int      @map("order_id")
+  customerId     Int      @map("customer_id")
+  discountAmount Decimal  @map("discount_amount") @db.Decimal(10, 2)
+  redeemedAt     DateTime @default(now()) @map("redeemed_at") @db.Timestamptz(6)
+  offer          Offer    @relation("OfferRedemptions_OfferId", fields: [offerId], references: [id])
+  tenant         Tenant   @relation("OfferRedemptions_TenantId", fields: [tenantId], references: [id])
+  order          Order    @relation("OfferRedemptions_OrderId", fields: [orderId], references: [id])
+  customer       Customer @relation("OfferRedemptions_CustomerId", fields: [customerId], references: [id])
+
+  @@index([offerId, customerId], map: "idx_offer_redemptions_customer")
+  @@map("offer_redemptions")
+}
+
+model Coupon {
+  id                    Int                @id @default(autoincrement())
+  tenantId              String             @map("tenant_id") @db.VarChar(20)
+  code                  String             @db.VarChar(30)
+  description           String?            @db.Text
+  discountType          DiscountType       @map("discount_type")
+  discountValue         Decimal            @map("discount_value") @db.Decimal(10, 2)
+  minOrderValue         Decimal            @default(0) @map("min_order_value") @db.Decimal(10, 2)
+  maxDiscountAmount     Decimal?           @map("max_discount_amount") @db.Decimal(10, 2)
+  usageLimit            Int?               @map("usage_limit")
+  perCustomerUsageLimit Int                @default(1) @map("per_customer_usage_limit")
+  validFrom             DateTime           @map("valid_from") @db.Timestamptz(6)
+  validTo               DateTime           @map("valid_to") @db.Timestamptz(6)
+  isActive              Boolean            @default(true) @map("is_active")
+  createdBy             Int?               @map("created_by")
+  createdAt             DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant                Tenant             @relation("Coupons_TenantId", fields: [tenantId], references: [id])
+  staffUser             StaffUser?         @relation("Coupons_CreatedBy", fields: [createdBy], references: [id])
+  orders                Order[]            @relation("Orders_AppliedCouponId")
+  couponBranches        CouponBranch[]     @relation("CouponBranches_CouponId")
+  couponProducts        CouponProduct[]    @relation("CouponProducts_CouponId")
+  couponCategories      CouponCategory[]   @relation("CouponCategories_CouponId")
+  couponRedemptions     CouponRedemption[] @relation("CouponRedemptions_CouponId")
+
+  @@unique([tenantId, code])
+  @@map("coupons")
+}
+
+model CouponBranch {
+  tenantId String @map("tenant_id") @db.VarChar(20)
+  couponId Int    @map("coupon_id")
+  branchId String @map("branch_id") @db.VarChar(20)
+  tenant   Tenant @relation("CouponBranches_TenantId", fields: [tenantId], references: [id])
+  coupon   Coupon @relation("CouponBranches_CouponId", fields: [couponId], references: [id])
+  branch   Branch @relation("CouponBranches_BranchId", fields: [branchId], references: [id])
+
+  @@id([couponId, branchId])
+  @@unique([couponId, branchId])
+  @@unique([tenantId, couponId, branchId])
+  @@map("coupon_branches")
+}
+
+model CouponProduct {
+  tenantId  String  @map("tenant_id") @db.VarChar(20)
+  couponId  Int     @map("coupon_id")
+  productId Int     @map("product_id")
+  tenant    Tenant  @relation("CouponProducts_TenantId", fields: [tenantId], references: [id])
+  coupon    Coupon  @relation("CouponProducts_CouponId", fields: [couponId], references: [id])
+  product   Product @relation("CouponProducts_ProductId", fields: [productId], references: [id])
+
+  @@id([couponId, productId])
+  @@unique([couponId, productId])
+  @@unique([tenantId, couponId, productId])
+  @@map("coupon_products")
+}
+
+model CouponCategory {
+  tenantId   String   @map("tenant_id") @db.VarChar(20)
+  couponId   Int      @map("coupon_id")
+  categoryId Int      @map("category_id")
+  tenant     Tenant   @relation("CouponCategories_TenantId", fields: [tenantId], references: [id])
+  coupon     Coupon   @relation("CouponCategories_CouponId", fields: [couponId], references: [id])
+  category   Category @relation("CouponCategories_CategoryId", fields: [categoryId], references: [id])
+
+  @@id([couponId, categoryId])
+  @@unique([couponId, categoryId])
+  @@unique([tenantId, couponId, categoryId])
+  @@map("coupon_categories")
+}
+
+model CouponRedemption {
+  id             Int      @id @default(autoincrement())
+  couponId       Int      @map("coupon_id")
+  tenantId       String   @map("tenant_id") @db.VarChar(20)
+  orderId        Int      @map("order_id")
+  customerId     Int      @map("customer_id")
+  discountAmount Decimal  @map("discount_amount") @db.Decimal(10, 2)
+  redeemedAt     DateTime @default(now()) @map("redeemed_at") @db.Timestamptz(6)
+  coupon         Coupon   @relation("CouponRedemptions_CouponId", fields: [couponId], references: [id])
+  tenant         Tenant   @relation("CouponRedemptions_TenantId", fields: [tenantId], references: [id])
+  order          Order    @relation("CouponRedemptions_OrderId", fields: [orderId], references: [id])
+  customer       Customer @relation("CouponRedemptions_CustomerId", fields: [customerId], references: [id])
+
+  @@index([couponId, customerId], map: "idx_coupon_redemptions_customer")
+  @@map("coupon_redemptions")
+}
+
+model LoyaltyAccount {
+  id                  Int                  @id @default(autoincrement())
+  tenantId            String               @map("tenant_id") @db.VarChar(20)
+  customerId          Int                  @map("customer_id")
+  balance             Int                  @default(0)
+  updatedAt           DateTime             @default(now()) @map("updated_at") @db.Timestamptz(6)
+  tenant              Tenant               @relation("LoyaltyAccounts_TenantId", fields: [tenantId], references: [id])
+  customer            Customer             @relation("LoyaltyAccounts_CustomerId", fields: [customerId], references: [id])
+  loyaltyTransactions LoyaltyTransaction[] @relation("LoyaltyTransactions_LoyaltyAccountId")
+
+  @@unique([tenantId, customerId])
+  @@map("loyalty_accounts")
+}
+
+model LoyaltyTransaction {
+  id               Int            @id @default(autoincrement())
+  loyaltyAccountId Int            @map("loyalty_account_id")
+  tenantId         String         @map("tenant_id") @db.VarChar(20)
+  orderId          Int?           @map("order_id")
+  type             LoyaltyTxnType
+  points           Int
+  balanceAfter     Int            @map("balance_after")
+  expiresAt        DateTime?      @map("expires_at") @db.Timestamptz(6)
+  note             String?        @db.Text
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  loyaltyAccount   LoyaltyAccount @relation("LoyaltyTransactions_LoyaltyAccountId", fields: [loyaltyAccountId], references: [id])
+  tenant           Tenant         @relation("LoyaltyTransactions_TenantId", fields: [tenantId], references: [id])
+  order            Order?         @relation("LoyaltyTransactions_OrderId", fields: [orderId], references: [id])
+
+  @@index([loyaltyAccountId], map: "idx_loyalty_txn_account")
+  @@map("loyalty_transactions")
+}
+
+model CustomerStat {
+  tenantId          String    @map("tenant_id") @db.VarChar(20)
+  customerId        Int       @map("customer_id")
+  totalOrders       Int       @default(0) @map("total_orders")
+  totalSpend        Decimal   @default(0) @map("total_spend") @db.Decimal(12, 2)
+  firstOrderAt      DateTime? @map("first_order_at") @db.Timestamptz(6)
+  lastOrderAt       DateTime? @map("last_order_at") @db.Timestamptz(6)
+  favoriteProductId Int?      @map("favorite_product_id")
+  favoriteBranchId  String?   @map("favorite_branch_id") @db.VarChar(20)
+  updatedAt         DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  tenant            Tenant    @relation("CustomerStats_TenantId", fields: [tenantId], references: [id])
+  customer          Customer  @relation("CustomerStats_CustomerId", fields: [customerId], references: [id])
+  product           Product?  @relation("CustomerStats_FavoriteProductId", fields: [favoriteProductId], references: [id])
+  branch            Branch?   @relation("CustomerStats_FavoriteBranchId", fields: [favoriteBranchId], references: [id])
+
+  @@id([tenantId, customerId])
+  @@unique([tenantId, customerId])
+  @@index([tenantId, lastOrderAt], map: "idx_customer_stats_last_order")
+  @@index([tenantId, totalSpend], map: "idx_customer_stats_spend")
+  @@map("customer_stats")
+}
+
+model Campaign {
+  id                 Int                 @id @default(autoincrement())
+  tenantId           String              @map("tenant_id") @db.VarChar(20)
+  title              String              @db.VarChar(150)
+  channel            CampaignChannel
+  messageBody        String              @map("message_body") @db.Text
+  targetSegment      String              @map("target_segment") @db.VarChar(30)
+  scheduledAt        DateTime?           @map("scheduled_at") @db.Timestamptz(6)
+  status             CampaignStatus      @default(DRAFT)
+  createdBy          Int?                @map("created_by")
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant             Tenant              @relation("Campaigns_TenantId", fields: [tenantId], references: [id])
+  staffUser          StaffUser?          @relation("Campaigns_CreatedBy", fields: [createdBy], references: [id])
+  campaignRecipients CampaignRecipient[] @relation("CampaignRecipients_CampaignId")
+
+  @@index([tenantId], map: "idx_campaigns_tenant")
+  @@map("campaigns")
+}
+
+model CampaignRecipient {
+  id          Int             @id @default(autoincrement())
+  campaignId  Int             @map("campaign_id")
+  tenantId    String          @map("tenant_id") @db.VarChar(20)
+  customerId  Int             @map("customer_id")
+  status      RecipientStatus @default(PENDING)
+  sentAt      DateTime?       @map("sent_at") @db.Timestamptz(6)
+  deliveredAt DateTime?       @map("delivered_at") @db.Timestamptz(6)
+  readAt      DateTime?       @map("read_at") @db.Timestamptz(6)
+  campaign    Campaign        @relation("CampaignRecipients_CampaignId", fields: [campaignId], references: [id])
+  tenant      Tenant          @relation("CampaignRecipients_TenantId", fields: [tenantId], references: [id])
+  customer    Customer        @relation("CampaignRecipients_CustomerId", fields: [customerId], references: [id])
+
+  @@index([campaignId], map: "idx_campaign_recipients_campaign")
+  @@map("campaign_recipients")
+}
+
+model NotificationLog {
+  id                Int                 @id @default(autoincrement())
+  tenantId          String              @map("tenant_id") @db.VarChar(20)
+  customerId        Int?                @map("customer_id")
+  staffId           Int?                @map("staff_id")
+  channel           NotificationChannel
+  type              String              @db.VarChar(50)
+  status            NotificationStatus  @default(PENDING)
+  providerMessageId String?             @map("provider_message_id") @db.VarChar(150)
+  sentAt            DateTime?           @map("sent_at") @db.Timestamptz(6)
+  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant            Tenant              @relation("NotificationLogs_TenantId", fields: [tenantId], references: [id])
+  customer          Customer?           @relation("NotificationLogs_CustomerId", fields: [customerId], references: [id])
+  staffUser         StaffUser?          @relation("NotificationLogs_StaffId", fields: [staffId], references: [id])
+
+  @@index([tenantId, customerId], map: "idx_notification_logs_tenant_customer")
+  @@map("notification_logs")
+}
+
+model Captain {
+  id                       Int                       @id
+  tenantId                 String                    @map("tenant_id") @db.VarChar(20)
+  vehicleType              String?                   @map("vehicle_type") @db.VarChar(50)
+  vehicleNumber            String?                   @map("vehicle_number") @db.VarChar(20)
+  currentStatus            String                    @default("OFFLINE") @map("current_status") @db.VarChar(20)
+  staffUser                StaffUser                 @relation("Captains_Id", fields: [id], references: [id])
+  tenant                   Tenant                    @relation("Captains_TenantId", fields: [tenantId], references: [id])
+  captainBranchAssignments CaptainBranchAssignment[] @relation("CaptainBranchAssignments_CaptainId")
+  deliveries               Delivery[]                @relation("Deliveries_CaptainId")
+  captainLocations         CaptainLocation[]         @relation("CaptainLocations_CaptainId")
+
+  @@map("captains")
+}
+
+model CaptainBranchAssignment {
+  id        Int     @id @default(autoincrement())
+  captainId Int     @map("captain_id")
+  branchId  String  @map("branch_id") @db.VarChar(20)
+  tenantId  String  @map("tenant_id") @db.VarChar(20)
+  captain   Captain @relation("CaptainBranchAssignments_CaptainId", fields: [captainId], references: [id])
+  branch    Branch  @relation("CaptainBranchAssignments_BranchId", fields: [branchId], references: [id])
+  tenant    Tenant  @relation("CaptainBranchAssignments_TenantId", fields: [tenantId], references: [id])
+
+  @@unique([captainId, branchId])
+  @@map("captain_branch_assignments")
+}
+
+model Delivery {
+  id               Int            @id @default(autoincrement())
+  orderId          Int            @unique @map("order_id")
+  tenantId         String         @map("tenant_id") @db.VarChar(20)
+  captainId        Int?           @map("captain_id")
+  status           DeliveryStatus @default(ASSIGNED)
+  assignedAt       DateTime       @default(now()) @map("assigned_at") @db.Timestamptz(6)
+  pickedUpAt       DateTime?      @map("picked_up_at") @db.Timestamptz(6)
+  deliveredAt      DateTime?      @map("delivered_at") @db.Timestamptz(6)
+  distanceKm       Decimal?       @map("distance_km") @db.Decimal(6, 2)
+  deliveryProofUrl String?        @map("delivery_proof_url") @db.Text
+  order            Order          @relation("Deliveries_OrderId", fields: [orderId], references: [id])
+  tenant           Tenant         @relation("Deliveries_TenantId", fields: [tenantId], references: [id])
+  captain          Captain?       @relation("Deliveries_CaptainId", fields: [captainId], references: [id])
+
+  @@index([captainId], map: "idx_deliveries_captain")
+  @@map("deliveries")
+}
+
+model CaptainLocation {
+  id         Int      @id @default(autoincrement())
+  captainId  Int      @map("captain_id")
+  tenantId   String   @map("tenant_id") @db.VarChar(20)
+  latitude   Decimal  @db.Decimal(10, 7)
+  longitude  Decimal  @db.Decimal(10, 7)
+  recordedAt DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
+  captain    Captain  @relation("CaptainLocations_CaptainId", fields: [captainId], references: [id])
+  tenant     Tenant   @relation("CaptainLocations_TenantId", fields: [tenantId], references: [id])
+
+  @@index([captainId, recordedAt], map: "idx_captain_locations_captain_time")
+  @@map("captain_locations")
+}
+
+model Review {
+  id            Int          @id @default(autoincrement())
+  tenantId      String       @map("tenant_id") @db.VarChar(20)
+  customerId    Int          @map("customer_id")
+  orderId       Int?         @map("order_id")
+  productId     Int?         @map("product_id")
+  branchId      String?      @map("branch_id") @db.VarChar(20)
+  rating        Int          @db.SmallInt
+  comment       String?      @db.Text
+  status        ReviewStatus @default(PENDING)
+  adminResponse String?      @map("admin_response") @db.Text
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant        Tenant       @relation("Reviews_TenantId", fields: [tenantId], references: [id])
+  customer      Customer     @relation("Reviews_CustomerId", fields: [customerId], references: [id])
+  order         Order?       @relation("Reviews_OrderId", fields: [orderId], references: [id])
+  product       Product?     @relation("Reviews_ProductId", fields: [productId], references: [id])
+  branch        Branch?      @relation("Reviews_BranchId", fields: [branchId], references: [id])
+
+  @@index([tenantId, productId], map: "idx_reviews_tenant_product")
+  @@index([tenantId, branchId], map: "idx_reviews_tenant_branch")
+  @@map("reviews")
+}
+
+model Banner {
+  id           Int       @id @default(autoincrement())
+  tenantId     String    @map("tenant_id") @db.VarChar(20)
+  title        String    @db.VarChar(150)
+  description  String?   @db.Text
+  imageUrl     String?   @map("image_url") @db.Text
+  offerText    String?   @map("offer_text") @db.VarChar(255)
+  couponCode   String?   @map("coupon_code") @db.VarChar(50)
+  startDate    DateTime? @map("start_date") @db.Timestamptz(6)
+  endDate      DateTime? @map("end_date") @db.Timestamptz(6)
+  displayOrder Int       @default(0) @map("display_order")
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  tenant       Tenant    @relation("Banners_TenantId", fields: [tenantId], references: [id])
+
+  @@index([tenantId], map: "idx_banners_tenant")
+  @@index([isActive], map: "idx_banners_active")
+  @@map("banners")
+}
+
+model DailyBranchSummary {
+  id                Int      @id @default(autoincrement())
+  tenantId          String   @map("tenant_id") @db.VarChar(20)
+  branchId          String   @map("branch_id") @db.VarChar(20)
+  summaryDate       DateTime @map("summary_date") @db.Date
+  totalOrders       Int      @default(0) @map("total_orders")
+  totalRevenue      Decimal  @default(0) @map("total_revenue") @db.Decimal(12, 2)
+  totalGstCollected Decimal  @default(0) @map("total_gst_collected") @db.Decimal(12, 2)
+  newCustomers      Int      @default(0) @map("new_customers")
+  repeatCustomers   Int      @default(0) @map("repeat_customers")
+  cancelledOrders   Int      @default(0) @map("cancelled_orders")
+  tenant            Tenant   @relation("DailyBranchSummary_TenantId", fields: [tenantId], references: [id])
+  branch            Branch   @relation("DailyBranchSummary_BranchId", fields: [branchId], references: [id])
+
+  @@unique([tenantId, branchId, summaryDate])
+  @@map("daily_branch_summary")
+}
+
+model AuditLog {
+  id           Int        @id @default(autoincrement())
+  tenantId     String?    @map("tenant_id") @db.VarChar(20)
+  actorStaffId Int?       @map("actor_staff_id")
+  action       String     @db.VarChar(50)
+  entityType   String     @map("entity_type") @db.VarChar(50)
+  entityId     String     @map("entity_id") @db.VarChar(100)
+  oldData      Json?      @map("old_data") @db.JsonB
+  newData      Json?      @map("new_data") @db.JsonB
+  ipAddress    String?    @map("ip_address") @db.Inet
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant       Tenant?    @relation("AuditLogs_TenantId", fields: [tenantId], references: [id])
+  staffUser    StaffUser? @relation("AuditLogs_ActorStaffId", fields: [actorStaffId], references: [id])
+
+  @@index([tenantId, entityType, entityId], map: "idx_audit_logs_tenant_entity")
+  @@map("audit_logs")
+}
