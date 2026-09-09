@@ -19,13 +19,14 @@ export const createAddress = async (
   next: NextFunction
 ) => {
   try {
-    const customerId = Number(
-      req.params.id
-    );
+    const customerId = req.customer!.customerId;
 
     const address = await createAddressService(
       customerId,
-      req.body
+      {
+        ...req.body,
+        tenantId: req.customer!.tenantId,
+      }
     );
 
     return res.status(201).json({
@@ -47,9 +48,7 @@ export const getCustomerAddresses = async (
   next: NextFunction
 ) => {
   try {
-    const customerId = Number(
-      req.params.id
-    );
+    const customerId = req.customer!.customerId;
 
     const addresses =
       await getCustomerAddressesService(customerId);
@@ -73,9 +72,7 @@ export const getAddressById = async (
   next: NextFunction
 ) => {
   try {
-    const customerId = Number(
-      req.params.id
-    );
+    const customerId = req.customer!.customerId;
 
     const addressId = Number(req.params.addressId);
 
@@ -103,9 +100,7 @@ export const updateAddress = async (
   next: NextFunction
 ) => {
   try {
-    const customerId = Number(
-      req.params.id
-    );
+    const customerId = req.customer!.customerId;
 
     const addressId = Number(req.params.addressId);
 
@@ -134,9 +129,7 @@ export const deleteAddress = async (
   next: NextFunction
 ) => {
   try {
-    const customerId = Number(
-      req.params.id
-    );
+    const customerId = req.customer!.customerId;
 
     const addressId = Number(req.params.addressId);
 
@@ -164,9 +157,7 @@ export const setDefaultAddress = async (
   next: NextFunction
 ) => {
   try {
-    const customerId = Number(
-      req.params.id
-    );
+    const customerId = req.customer!.customerId;
 
     const addressId = Number(req.params.addressId);
 

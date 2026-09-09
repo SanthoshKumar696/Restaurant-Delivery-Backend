@@ -16,7 +16,7 @@ export const createCouponController = async (
   next: NextFunction
 ) => {
   try {
-    const coupon = await createCoupon(req.admin!.tenantId, req.admin!.adminId, req.body);
+    const coupon = await createCoupon(req.admin!.tenantId, null, req.body);
     return successResponse(res, "Coupon created successfully", coupon, 201);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Coupon creation failed";

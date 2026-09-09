@@ -52,9 +52,21 @@ export const createProduct = async (
   });
 };
 
-export const getAllProducts = async (tenantId: string) => {
-  return prisma.product.findMany({
-    where: { tenantId },
+export const getAllProducts = async (tenantId: string, branchId?: string) => {
+  const branchProducts = branchId
+    ? await prisma.branchProduct.findMany({
+        where: { tenantId, branchId, isAvailable: true },
+        select: { productId: true, priceOverride: true },
+      })
+    : [];
+
+  const products = await prisma.product.findMany({
+    where: {
+      tenantId,
+      ...(branchId && branchProducts.length > 0
+        ? { id: { in: branchProducts.map((branchProduct) => branchProduct.productId) } }
+        : {}),
+    },
     orderBy: {
       createdAt: "desc",
     },
@@ -62,9 +74,40 @@ export const getAllProducts = async (tenantId: string) => {
       category: true,
     },
   });
+
+  if (!branchId || branchProducts.length === 0) {
+    return products;
+  }
+
+  const priceOverrides = new Map(
+    branchProducts.map((branchProduct) => [branchProduct.productId, branchProduct.priceOverride])
+  );
+
+  return products.map((product) => ({
+    ...product,
+    basePrice: priceOverrides.get(product.id) ?? product.basePrice,
+  }));
 };
 
-export const getProductById = async (id: number, tenantId: string) => {
+export const getProductById = async (id: number, tenantId: string, branchId?: string) => {
+  const branchProduct = branchId
+    ? await prisma.branchProduct.findFirst({
+        where: { tenantId, branchId, productId: id, isAvailable: true },
+        select: { priceOverride: true },
+      })
+    : null;
+
+  const branchHasCatalog = branchId
+    ? await prisma.branchProduct.findFirst({
+        where: { tenantId, branchId, isAvailable: true },
+        select: { id: true },
+      })
+    : null;
+
+  if (branchId && branchHasCatalog && !branchProduct) {
+    throw new Error("Product not found");
+  }
+
   const product = await prisma.product.findUnique({
     where: {
       id,
@@ -79,7 +122,9 @@ export const getProductById = async (id: number, tenantId: string) => {
     throw new Error("Product not found");
   }
 
-  return product;
+  return branchProduct?.priceOverride === null || branchProduct?.priceOverride === undefined
+    ? product
+    : { ...product, basePrice: branchProduct.priceOverride };
 };
 
 export const updateProduct = async (

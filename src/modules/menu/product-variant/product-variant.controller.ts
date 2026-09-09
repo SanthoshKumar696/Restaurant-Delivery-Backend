@@ -34,7 +34,10 @@ export const getAllProductVariants = async (
 ) => {
   try {
     const variants =
-      await getAllProductVariantsService(String(req.query.tenantId));
+      await getAllProductVariantsService(
+        String(req.query.tenantId),
+        typeof req.query.branchId === "string" ? req.query.branchId : undefined
+      );
 
     return res.status(200).json({
       success: true,

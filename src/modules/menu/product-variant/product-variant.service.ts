@@ -45,9 +45,21 @@ export const createProductVariant = async (
   });
 };
 
-export const getAllProductVariants = async (tenantId: string) => {
+export const getAllProductVariants = async (tenantId: string, branchId?: string) => {
+  const branchProducts = branchId
+    ? await prisma.branchProduct.findMany({
+        where: { tenantId, branchId, isAvailable: true },
+        select: { productId: true },
+      })
+    : [];
+
   return prisma.productVariant.findMany({
-    where: { tenantId },
+    where: {
+      tenantId,
+      ...(branchId && branchProducts.length > 0
+        ? { productId: { in: branchProducts.map((branchProduct) => branchProduct.productId) } }
+        : {}),
+    },
     orderBy: {
       displayOrder: "asc",
     },

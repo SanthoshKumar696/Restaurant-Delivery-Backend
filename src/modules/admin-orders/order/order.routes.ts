@@ -150,16 +150,16 @@ router.get(
  *         description: Internal server error
  */
 router.get(
-  "/:id",
-  requireAdminAuth,
-  getAdminOrderById
-);
-
-router.get(
   "/status/:status",
   requireAdminAuth,
   validate(adminOrderStatusListSchema),
   getOrdersByStatus
+);
+
+router.get(
+  "/:id",
+  requireAdminAuth,
+  getAdminOrderById
 );
 
 /**

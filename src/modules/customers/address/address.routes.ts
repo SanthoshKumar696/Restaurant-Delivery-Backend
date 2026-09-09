@@ -151,7 +151,7 @@ router.get(
  *       - bearerAuth: []
  */
 router.get(
-  "/address/:id",
+  "/:id/addresses/:addressId",
   requireCustomerAuth,
   validate(addressIdSchema),
   getAddressById
@@ -257,7 +257,7 @@ router.put(
  *       - bearerAuth: []
  */
 router.delete(
-  "/address/:id",
+  "/:id/addresses/:addressId",
   requireCustomerAuth,
   validate(addressIdSchema),
   deleteAddress
@@ -292,6 +292,7 @@ router.delete(
  */
 router.patch(
   "/:id/addresses/:addressId/default",
+  requireCustomerAuth,
   validate(addressIdSchema),
   setDefaultAddress
 );

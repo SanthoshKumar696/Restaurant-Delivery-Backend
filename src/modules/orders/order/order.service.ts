@@ -44,6 +44,15 @@ export const createOrder = async (data: CreateOrderInput) => {
     throw new Error("Branch does not belong to this tenant");
   }
 
+  const branchCatalog = await prisma.branchProduct.findMany({
+    where: {
+      tenantId: data.tenantId,
+      branchId: data.branchId,
+      isAvailable: true,
+    },
+    select: { productId: true, priceOverride: true },
+  });
+
   // -----------------------------------
   // 3. Check Customer
   // -----------------------------------
@@ -75,7 +84,9 @@ export const createOrder = async (data: CreateOrderInput) => {
   const products = await prisma.product.findMany({
     where: {
       id: {
-        in: productIds,
+        in: branchCatalog.length > 0
+          ? productIds.filter((productId) => branchCatalog.some((item) => item.productId === productId))
+          : productIds,
       },
       tenantId: data.tenantId,
       isActive: true,
@@ -125,6 +136,11 @@ export const createOrder = async (data: CreateOrderInput) => {
     }
 
     let unitPrice = Number(product.basePrice);
+    const branchProduct = branchCatalog.find((catalogEntry) => catalogEntry.productId === item.productId);
+
+    if (branchProduct?.priceOverride !== null && branchProduct?.priceOverride !== undefined) {
+      unitPrice = Number(branchProduct.priceOverride);
+    }
     let variantName: string | null = null;
 
     if (item.variantId) {

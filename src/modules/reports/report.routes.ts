@@ -35,6 +35,8 @@ const router = Router();
  *     responses:
  *       200:
  *         description: Dashboard report fetched successfully
+ *     security:
+ *       - bearerAuth: []
  */
 router.get("/dashboard", requireAdminAuth, getDashboardReport);
 
@@ -73,6 +75,8 @@ router.get("/dashboard", requireAdminAuth, getDashboardReport);
  *     responses:
  *       200:
  *         description: Sales report fetched successfully
+ *     security:
+ *       - bearerAuth: []
  */
 router.get("/sales", requireAdminAuth, getSalesReport);
 
@@ -111,6 +115,8 @@ router.get("/sales", requireAdminAuth, getSalesReport);
  *     responses:
  *       200:
  *         description: Order report fetched successfully
+ *     security:
+ *       - bearerAuth: []
  */
 router.get("/orders", requireAdminAuth, getOrderReport);
 
@@ -132,6 +138,8 @@ router.get("/orders", requireAdminAuth, getOrderReport);
  *     responses:
  *       200:
  *         description: Customer report fetched successfully
+ *     security:
+ *       - bearerAuth: []
  */
 router.get("/customers", requireAdminAuth, getCustomerReport);
 
@@ -165,6 +173,8 @@ router.get("/customers", requireAdminAuth, getCustomerReport);
  *     responses:
  *       200:
  *         description: Branch report fetched successfully
+ *     security:
+ *       - bearerAuth: []
  */
 router.get("/branches", requireAdminAuth, getBranchReport);
 
@@ -203,6 +213,8 @@ router.get("/branches", requireAdminAuth, getBranchReport);
  *     responses:
  *       200:
  *         description: Product report fetched successfully
+ *     security:
+ *       - bearerAuth: []
  */
 router.get("/products", requireAdminAuth, getProductReport);
 

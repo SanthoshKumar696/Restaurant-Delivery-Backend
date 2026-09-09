@@ -100,6 +100,12 @@ router.post(
  *         schema:
  *           type: string
  *         example: T001
+ *       - in: query
+ *         name: branchId
+ *         required: false
+ *         schema:
+ *           type: string
+ *         example: B001
  *     responses:
  *       200:
  *         description: Products fetched successfully

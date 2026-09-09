@@ -20,7 +20,7 @@ const getFilters = (req: Request) => {
   return {
     tenantId: tenantId
       ? String(tenantId)
-      : undefined,
+      : req.admin?.tenantId,
 
     branchId: branchId
       ? String(branchId)

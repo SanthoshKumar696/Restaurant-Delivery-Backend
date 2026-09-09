@@ -22,8 +22,11 @@ export const createOrder = async (
   next: NextFunction
 ) => {
   try {
-    const order =
-      await createOrderService(req.body);
+    const order = await createOrderService({
+      ...req.body,
+      tenantId: req.customer!.tenantId,
+      customerId: req.customer!.customerId,
+    });
 
     return res.status(201).json({
       success: true,
@@ -45,11 +48,8 @@ export const getCustomerOrders = async (
   next: NextFunction
 ) => {
   try {
-    const customerId = Number(
-      req.params.customerId
-    );
-
-    const tenantId = String(req.query.tenantId);
+    const customerId = req.customer!.customerId;
+    const tenantId = req.customer!.tenantId;
 
     if (!tenantId) {
       return res.status(400).json({
@@ -81,13 +81,11 @@ export const getOrderById = async (
   next: NextFunction
 ) => {
   try {
-    const customerId = Number(
-      req.params.customerId
-    );
+    const customerId = req.customer!.customerId;
 
     const orderId = Number(req.params.id);
 
-    const tenantId = String(req.query.tenantId);
+    const tenantId = req.customer!.tenantId;
 
     if (!tenantId) {
       return res.status(400).json({
@@ -119,10 +117,7 @@ export const updateOrderStatus = async (
   next: NextFunction
 ) => {
   try {
-    const customerId = Number(
-      req.params.customerId
-    );
-
+    const customerId = req.customer!.customerId;
     const orderId = Number(req.params.id);
 
     // Customers should not be able to update order status
@@ -145,13 +140,9 @@ export const cancelOrder = async (
   next: NextFunction
 ) => {
   try {
-    const customerId = Number(
-      req.params.customerId
-    );
-
+    const customerId = req.customer!.customerId;
     const orderId = Number(req.params.id);
-
-    const tenantId = String(req.body.tenantId || req.query.tenantId);
+    const tenantId = req.customer!.tenantId;
 
     if (!tenantId) {
       return res.status(400).json({

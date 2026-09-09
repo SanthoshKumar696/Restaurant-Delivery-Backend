@@ -32,7 +32,10 @@ export const getAllProducts = async (
   next: NextFunction
 ) => {
   try {
-    const products = await getAllProductsService(String(req.query.tenantId));
+    const products = await getAllProductsService(
+      String(req.query.tenantId),
+      typeof req.query.branchId === "string" ? req.query.branchId : undefined
+    );
 
     return res.status(200).json({
       success: true,
@@ -52,7 +55,8 @@ export const getProductById = async (
   try {
     const product = await getProductByIdService(
       Number(req.params.id),
-      String(req.query.tenantId)
+      String(req.query.tenantId),
+      typeof req.query.branchId === "string" ? req.query.branchId : undefined
     );
 
     return res.status(200).json({

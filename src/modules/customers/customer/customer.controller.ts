@@ -43,7 +43,7 @@ export const getAllCustomers = async (
 ) => {
   try {
     const customers =
-      await getAllCustomersService();
+      await getAllCustomersService(_req.admin!.tenantId);
 
     return res.status(200).json({
       success: true,
@@ -62,6 +62,14 @@ export const getCustomersByTenant = async (
   next: NextFunction
 ) => {
   try {
+    if (String(req.params.tenantId) !== req.admin!.tenantId) {
+      return res.status(403).json({
+        success: false,
+        message: "Admin is not authorized for this tenant",
+        error: { code: "TENANT_ACCESS_DENIED", statusCode: 403 },
+      });
+    }
+
     const customers =
       await getCustomersByTenantService(
         String(req.params.tenantId)
@@ -87,7 +95,8 @@ export const getCustomerById = async (
   try {
     const customer =
       await getCustomerByIdService(
-        Number(req.params.id)
+        Number(req.params.id),
+        req.admin!.tenantId
       );
 
     return res.status(200).json({
@@ -110,7 +119,8 @@ export const updateCustomer = async (
     const customer =
       await updateCustomerService(
         Number(req.params.id),
-        req.body
+        req.body,
+        req.admin!.tenantId
       );
 
     return res.status(200).json({
@@ -132,7 +142,8 @@ export const deleteCustomer = async (
   try {
     const customer =
       await deleteCustomerService(
-        Number(req.params.id)
+        Number(req.params.id),
+        req.admin!.tenantId
       );
 
     return res.status(200).json({
@@ -155,7 +166,8 @@ export const getCustomerProfile = async (
 ) => {
   try {
     const customer = await getCustomerProfileService(
-      Number(req.params.id)
+      req.customer!.customerId,
+      req.customer!.tenantId
     );
 
     return res.status(200).json({
@@ -178,7 +190,7 @@ export const updateCustomerProfile = async (
 ) => {
   try {
     const customer = await updateCustomerProfileService(
-      Number(req.params.id),
+      req.customer!.customerId,
       {
         ...req.body,
 
@@ -187,7 +199,8 @@ export const updateCustomerProfile = async (
           req.body.dateOfBirth !== null
             ? new Date(req.body.dateOfBirth)
             : req.body.dateOfBirth,
-      }
+      },
+      req.customer!.tenantId
     );
 
     return res.status(200).json({

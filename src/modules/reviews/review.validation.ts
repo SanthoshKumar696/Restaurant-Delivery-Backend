@@ -42,12 +42,9 @@ export const productReviewsSchema = z.object({
     productId: z.string().regex(/^\d+$/, "Invalid product ID"),
   }),
   query: z.object({
-    tenantId: z.string().trim().min(1, "TENANT_ID_REQUIRED").optional(),
+    tenantId: z.string().trim().min(1, "Tenant ID is required").optional(),
     page: z.coerce.number().int().min(1).default(1).optional(),
     limit: z.coerce.number().int().min(1).max(50).default(10).optional(),
-  }).refine((value) => Boolean(value.tenantId), {
-    message: "TENANT_ID_REQUIRED",
-    path: ["tenantId"],
   }),
   body: z.object({}).optional(),
 });

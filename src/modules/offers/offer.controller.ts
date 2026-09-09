@@ -19,7 +19,7 @@ export const createOfferController = async (
   next: NextFunction
 ) => {
   try {
-    const offer = await createOffer(req.admin!.tenantId, req.admin!.adminId, req.body);
+    const offer = await createOffer(req.admin!.tenantId, null, req.body);
     return successResponse(res, "Offer created successfully", offer, 201);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Offer creation failed";

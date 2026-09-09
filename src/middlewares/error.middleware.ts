@@ -28,6 +28,22 @@ export const errorHandler = (
     );
   }
 
+  if (err instanceof Error && err.message === "Customer not found") {
+    return errorResponse(res, "Customer not found", 404, "CUSTOMER_NOT_FOUND");
+  }
+
+  if (err instanceof Error && err.message === "Branch not found") {
+    return errorResponse(res, "Branch not found", 404, "BRANCH_NOT_FOUND");
+  }
+
+  if (err instanceof Error && err.message === "Branch does not belong to this tenant") {
+    return errorResponse(res, "Branch does not belong to this tenant", 403, "TENANT_ACCESS_DENIED");
+  }
+
+  if (err instanceof Error && err.message === "One or more products were not found or inactive") {
+    return errorResponse(res, "One or more products were not found or inactive", 404, "PRODUCT_NOT_FOUND");
+  }
+
   if (
     process.env.NODE_ENV !== "production" &&
     err instanceof Error &&

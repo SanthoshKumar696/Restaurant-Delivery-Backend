@@ -241,6 +241,10 @@ export const getBranchReport = async (
     branchWhere.tenantId = filters.tenantId;
   }
 
+  if (filters.branchId) {
+    branchWhere.id = filters.branchId;
+  }
+
   const branches = await prisma.branch.findMany({
     where: branchWhere,
     select: {

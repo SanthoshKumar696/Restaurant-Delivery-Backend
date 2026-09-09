@@ -130,5 +130,6 @@ export const productIdSchema = z.object({
   }),
   query: z.object({
     tenantId: z.string().trim().min(1, "Tenant ID is required"),
+    branchId: z.string().trim().min(1, "Branch ID is required").optional(),
   }),
 });

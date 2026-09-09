@@ -51,8 +51,9 @@ export const createCustomer = async (
 };
 
 // GET ALL CUSTOMERS
-export const getAllCustomers = async () => {
+export const getAllCustomers = async (tenantId: string) => {
   return prisma.customer.findMany({
+    where: { tenantId },
     orderBy: {
       createdAt: "desc",
     },
@@ -85,11 +86,13 @@ export const getCustomersByTenant = async (
 
 // GET CUSTOMER BY ID
 export const getCustomerById = async (
-  id: number
+  id: number,
+  tenantId: string
 ) => {
   const customer = await prisma.customer.findUnique({
     where: {
       id,
+      tenantId,
     },
   });
 
@@ -103,12 +106,14 @@ export const getCustomerById = async (
 // UPDATE CUSTOMER
 export const updateCustomer = async (
   id: number,
-  data: UpdateCustomerInput
+  data: UpdateCustomerInput,
+  tenantId: string
 ) => {
   const existingCustomer =
     await prisma.customer.findUnique({
       where: {
         id,
+        tenantId,
       },
     });
 
@@ -148,12 +153,14 @@ export const updateCustomer = async (
 
 // DEACTIVATE CUSTOMER
 export const deleteCustomer = async (
-  id: number
+  id: number,
+  tenantId: string
 ) => {
   const existingCustomer =
     await prisma.customer.findUnique({
       where: {
         id,
+        tenantId,
       },
     });
 
@@ -177,10 +184,11 @@ export const deleteCustomer = async (
 /**
  * Get customer profile
  */
-export const getCustomerProfile = async (customerId: number) => {
+export const getCustomerProfile = async (customerId: number, tenantId: string) => {
   const customer = await prisma.customer.findUnique({
     where: {
       id: customerId,
+      tenantId,
     },
     select: {
       id: true,
@@ -208,11 +216,13 @@ export const getCustomerProfile = async (customerId: number) => {
  */
 export const updateCustomerProfile = async (
   customerId: number,
-  data: UpdateCustomerProfileInput
+  data: UpdateCustomerProfileInput,
+  tenantId: string
 ) => {
   const existingCustomer = await prisma.customer.findUnique({
     where: {
       id: customerId,
+        tenantId,
     },
   });
 
