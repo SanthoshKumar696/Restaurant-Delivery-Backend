@@ -1,4 +1,5 @@
 import { prisma } from "../../../database/prisma";
+import { awardLoyaltyForCompletedOrder } from "../../loyalty/loyalty.service";
 import {
   AdminOrderListFilter,
   AdminOrderListItem,
@@ -364,6 +365,10 @@ export const updateAdminOrderStatus = async (
     },
     data: updateData,
   });
+
+  if (data.status === "COMPLETED") {
+    await awardLoyaltyForCompletedOrder(tenantId, id);
+  }
 
   // Create status history record
   await prisma.orderStatusHistory.create({

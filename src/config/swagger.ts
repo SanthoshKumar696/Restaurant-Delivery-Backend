@@ -25,10 +25,16 @@ const options: swaggerJSDoc.Options = {
           bearerFormat: "JWT",
           description: "JWT token from admin login. Format: Authorization: Bearer <token>",
         },
+        customerAuth: {
+          type: "http",
+          scheme: "bearer",
+          bearerFormat: "JWT",
+          description: "JWT token from customer login. Format: Authorization: Bearer <token>",
+        },
       },
     },
 
-    security: [{ bearerAuth: [] }],
+    security: [],
 
     tags: [
       {

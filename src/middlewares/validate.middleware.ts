@@ -34,15 +34,30 @@ export const validate = (
     const data = result.data;
 
     if (data.body !== undefined) {
-      req.body = data.body;
+      Object.defineProperty(req, "body", {
+        value: data.body,
+        configurable: true,
+        writable: true,
+        enumerable: true,
+      });
     }
 
     if (data.params !== undefined) {
-      req.params = data.params as Request["params"];
+      Object.defineProperty(req, "params", {
+        value: data.params as Request["params"],
+        configurable: true,
+        writable: true,
+        enumerable: true,
+      });
     }
 
     if (data.query !== undefined) {
-      req.query = data.query as Request["query"];
+      Object.defineProperty(req, "query", {
+        value: data.query as Request["query"],
+        configurable: true,
+        writable: true,
+        enumerable: true,
+      });
     }
 
     next();

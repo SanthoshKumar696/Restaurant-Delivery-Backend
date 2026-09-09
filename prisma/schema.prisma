@@ -49,10 +49,19 @@ enum OrderStatus {
   @@map("order_status")
 }
 
+enum PaymentMethod {
+  CASH_ON_DELIVERY
+  ONLINE
+
+  @@map("payment_method")
+}
+
 enum PaymentStatus {
   PENDING
   PAID
+  SUCCESS
   FAILED
+  CANCELLED
   REFUNDED
   PARTIALLY_REFUNDED
 
@@ -79,6 +88,8 @@ enum CartStatus {
 
 enum DiscountType {
   PERCENTAGE
+  FIXED_AMOUNT
+  BUY_ONE_GET_ONE
   FLAT
   FREE_DELIVERY
 
@@ -176,6 +187,7 @@ model Tenant {
   customers                Customer[]                @relation("Customers_TenantId")
   customerAddresses        CustomerAddress[]         @relation("CustomerAddresses_TenantId")
   customerDeviceTokens     CustomerDeviceToken[]     @relation("CustomerDeviceTokens_TenantId")
+  payments                 Payment[]                 @relation("Payments_TenantId")
   categories               Category[]                @relation("Categories_TenantId")
   products                 Product[]                 @relation("Products_TenantId")
   productVariants          ProductVariant[]          @relation("ProductVariants_TenantId")
@@ -261,6 +273,7 @@ model Branch {
   staffBranchAssignments   StaffBranchAssignment[]   @relation("StaffBranchAssignments_BranchId")
   branchProducts           BranchProduct[]           @relation("BranchProducts_BranchId")
   branchVariantOverrides   BranchVariantOverride[]   @relation("BranchVariantOverrides_BranchId")
+  payments                 Payment[]                 @relation("Payments_BranchId")
   carts                    Cart[]                    @relation("Carts_BranchId")
   orders                   Order[]                   @relation("Orders_BranchId")
   offerBranches            OfferBranch[]             @relation("OfferBranches_BranchId")
@@ -404,6 +417,7 @@ model Customer {
   customerDeviceTokens CustomerDeviceToken[] @relation("CustomerDeviceTokens_CustomerId")
   carts                Cart[]                @relation("Carts_CustomerId")
   orders               Order[]               @relation("Orders_CustomerId")
+  payments             Payment[]             @relation("Payments_CustomerId")
   offerRedemptions     OfferRedemption[]     @relation("OfferRedemptions_CustomerId")
   couponRedemptions    CouponRedemption[]    @relation("CouponRedemptions_CustomerId")
   loyaltyAccounts      LoyaltyAccount[]      @relation("LoyaltyAccounts_CustomerId")
@@ -711,6 +725,7 @@ model Order {
   coupon                Coupon?              @relation("Orders_AppliedCouponId", fields: [appliedCouponId], references: [id])
   orderItems            OrderItem[]          @relation("OrderItems_OrderId")
   orderStatusHistory    OrderStatusHistory[] @relation("OrderStatusHistory_OrderId")
+  payment               Payment?             @relation("Payments_OrderId")
   paymentAttempts       PaymentAttempt[]     @relation("PaymentAttempts_OrderId")
   refunds               Refund[]             @relation("Refunds_OrderId")
   offerRedemptions      OfferRedemption[]    @relation("OfferRedemptions_OrderId")
@@ -788,6 +803,35 @@ model OrderStatusHistory {
   @@map("order_status_history")
 }
 
+model Payment {
+  id               Int           @id @default(autoincrement())
+  tenantId         String        @map("tenant_id") @db.VarChar(20)
+  branchId         String        @map("branch_id") @db.VarChar(20)
+  orderId          Int           @unique @map("order_id")
+  customerId       Int           @map("customer_id")
+  paymentMethod    PaymentMethod @map("payment_method")
+  paymentStatus    PaymentStatus @default(PENDING) @map("payment_status")
+  amount           Decimal       @db.Decimal(10, 2)
+  currency         String        @default("INR") @db.VarChar(10)
+  referenceId      String?       @map("reference_id") @db.VarChar(100)
+  gatewayName      String?       @map("gateway_name") @db.VarChar(50)
+  gatewayPaymentId String?       @map("gateway_payment_id") @db.VarChar(150)
+  gatewayOrderId   String?       @map("gateway_order_id") @db.VarChar(150)
+  paidAt           DateTime?     @map("paid_at") @db.Timestamptz(6)
+  failureReason    String?       @map("failure_reason") @db.Text
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime      @default(now()) @map("updated_at") @db.Timestamptz(6)
+  tenant           Tenant        @relation("Payments_TenantId", fields: [tenantId], references: [id])
+  branch           Branch        @relation("Payments_BranchId", fields: [branchId], references: [id])
+  customer         Customer      @relation("Payments_CustomerId", fields: [customerId], references: [id])
+  order            Order         @relation("Payments_OrderId", fields: [orderId], references: [id])
+
+  @@index([tenantId, paymentStatus], map: "idx_payments_tenant_status")
+  @@index([tenantId, customerId], map: "idx_payments_customer")
+  @@index([tenantId, branchId], map: "idx_payments_branch")
+  @@map("payments")
+}
+
 model PaymentAttempt {
   id               Int                  @id @default(autoincrement())
   orderId          Int                  @map("order_id")
@@ -858,6 +902,7 @@ model Offer {
   validTo               DateTime          @map("valid_to") @db.Timestamptz(6)
   isPopup               Boolean           @default(false) @map("is_popup")
   isActive              Boolean           @default(true) @map("is_active")
+  priority              Int               @default(1) @map("priority")
   createdBy             Int?              @map("created_by")
   createdAt             DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
   tenant                Tenant            @relation("Offers_TenantId", fields: [tenantId], references: [id])
