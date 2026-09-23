@@ -24,6 +24,7 @@ const router = Router();
  *     description: Creates a new restaurant branch for an existing tenant.
  *     tags:
  *       - Branches
+ *     security: []
  *     requestBody:
  *       required: true
  *       content:
@@ -70,7 +71,7 @@ const router = Router();
  *       404:
  *         description: Tenant not found
  */
-router.post("/", requireAdminAuth, validate(createBranchSchema), createBranch);
+router.post("/", validate(createBranchSchema), createBranch);
 
 /**
  * @swagger

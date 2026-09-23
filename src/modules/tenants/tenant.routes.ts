@@ -27,6 +27,7 @@ const router = Router();
  *     description: Creates a new restaurant tenant.
  *     tags:
  *       - Tenants
+ *     security: []
  *     requestBody:
  *       required: true
  *       content:
@@ -60,7 +61,7 @@ const router = Router();
  *       500:
  *         description: Internal server error
  */
-router.post("/", requireAdminAuth, createTenant);
+router.post("/", validate(createTenantSchema), createTenant);
 
 
 /**
