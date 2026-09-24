@@ -137,6 +137,38 @@ const main = async () => {
     const t1AdminToken = await loginAdmin(baseUrl, "e2e_v1_t001_admin");
     const t2AdminToken = await loginAdmin(baseUrl, "e2e_v1_t002_admin");
 
+    const onboardingSlug = `public-${Date.now()}`;
+    const tenantCreate = await request(baseUrl, "/api/tenants", apiJson(undefined, {
+      name: "Public Onboarding Tenant",
+      slug: onboardingSlug,
+      logoUrl: "https://example.com/logo.png",
+    }));
+    expectStatus(tenantCreate, 201, "tenant create without JWT");
+    const publicTenantId = tenantCreate.body.data.id as string;
+    expectStatus(await request(baseUrl, "/api/tenants"), 200, "tenant list without JWT");
+    expectStatus(await request(baseUrl, `/api/tenants/${publicTenantId}`), 200, "tenant detail without JWT");
+
+    const publicBranch = await request(baseUrl, "/api/branches", apiJson(undefined, {
+      tenantId: publicTenantId,
+      name: "Public Onboarding Branch",
+      addressLine: "123 Public Street",
+      city: "Bengaluru",
+      phone: "+919876543210",
+      deliveryEnabled: true,
+      pickupEnabled: true,
+    }));
+    expectStatus(publicBranch, 201, "branch create without JWT");
+
+    const tenantUpdate = await request(baseUrl, `/api/tenants/${publicTenantId}`, apiJson(undefined, {
+      name: "Updated Public Onboarding Tenant",
+      slug: `${onboardingSlug}-updated`,
+      logoUrl: "https://example.com/updated-logo.png",
+    }, "PUT"));
+    expectStatus(tenantUpdate, 200, "tenant update without JWT");
+
+    const tenantDelete = await request(baseUrl, `/api/tenants/${publicTenantId}`, apiJson(undefined, {}, "DELETE"));
+    expectStatus(tenantDelete, 200, "tenant delete without JWT");
+
     const publicMenu = ["categories?tenantId=T001", "products?tenantId=T001", "product-variants?tenantId=T001", "addon-groups?tenantId=T001", "addon-group-items?tenantId=T001", "product-addon-groups?tenantId=T001"];
     for (const path of publicMenu) expectStatus(await request(baseUrl, `/api/${path}`), 200, `public ${path}`);
     expectStatus(await request(baseUrl, "/api/categories"), 400, "missing public tenant");

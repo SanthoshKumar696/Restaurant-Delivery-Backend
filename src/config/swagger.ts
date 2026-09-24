@@ -140,6 +140,14 @@ for (const [path, definition] of Object.entries((swaggerSpec as { paths?: Record
     }
   }
 
+  if (/^\/api\/tenants(\/|$)/.test(path)) {
+    for (const [method, operation] of Object.entries(definition ?? {})) {
+      if (operation && typeof operation === "object" && !("$ref" in operation)) {
+        (operation as { security?: unknown }).security = [];
+      }
+    }
+  }
+
   if (/^\/api\/orders(\/|$)/.test(path) || /^\/api\/payments(\/|$)/.test(path)) {
     for (const operation of Object.values(definition ?? {})) {
       if (operation && typeof operation === "object" && !("$ref" in operation)) {

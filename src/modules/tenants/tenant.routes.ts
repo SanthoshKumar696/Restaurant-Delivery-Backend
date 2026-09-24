@@ -63,7 +63,6 @@ const router = Router();
  */
 router.post("/", validate(createTenantSchema), createTenant);
 
-
 /**
  * @swagger
  * /api/tenants:
@@ -72,14 +71,14 @@ router.post("/", validate(createTenantSchema), createTenant);
  *     description: Returns all restaurant tenants ordered by creation date.
  *     tags:
  *       - Tenants
+ *     security: []
  *     responses:
  *       200:
  *         description: Tenants fetched successfully
  *       500:
  *         description: Internal server error
  */
-router.get("/", requireAdminAuth, getAllTenants);
-
+router.get("/", getAllTenants);
 
 /**
  * @swagger
@@ -89,6 +88,7 @@ router.get("/", requireAdminAuth, getAllTenants);
  *     description: Returns a single tenant using its Tenant ID.
  *     tags:
  *       - Tenants
+ *     security: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -105,8 +105,7 @@ router.get("/", requireAdminAuth, getAllTenants);
  *       500:
  *         description: Internal server error
  */
-router.get("/:id", requireAdminAuth, getTenantById);
-
+router.get("/:id", validate(tenantIdSchema), getTenantById);
 
 /**
  * @swagger
@@ -116,6 +115,7 @@ router.get("/:id", requireAdminAuth, getTenantById);
  *     description: Updates an existing tenant.
  *     tags:
  *       - Tenants
+ *     security: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -154,8 +154,56 @@ router.get("/:id", requireAdminAuth, getTenantById);
  *       500:
  *         description: Internal server error
  */
-router.put("/:id", requireAdminAuth, updateTenant);
+router.put("/:id", validate(updateTenantSchema), updateTenant);
 
+/**
+ * @swagger
+ * /api/tenants/{id}:
+ *   patch:
+ *     summary: Update tenant
+ *     description: Updates an existing tenant using patch semantics.
+ *     tags:
+ *       - Tenants
+ *     security: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         description: Tenant ID, for example T001
+ *         schema:
+ *           type: string
+ *         example: T001
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 example: Updated Restaurant
+ *               slug:
+ *                 type: string
+ *                 example: updated-restaurant
+ *               logoUrl:
+ *                 type: string
+ *                 nullable: true
+ *                 example: https://example.com/new-logo.png
+ *               isActive:
+ *                 type: boolean
+ *                 example: true
+ *     responses:
+ *       200:
+ *         description: Tenant updated successfully
+ *       404:
+ *         description: Tenant not found
+ *       409:
+ *         description: Tenant with this slug already exists
+ *       500:
+ *         description: Internal server error
+ */
+router.patch("/:id", validate(updateTenantSchema), updateTenant);
 
 /**
  * @swagger
@@ -165,6 +213,7 @@ router.put("/:id", requireAdminAuth, updateTenant);
  *     description: Soft deletes a tenant by setting isActive to false. The tenant is not physically removed from the database.
  *     tags:
  *       - Tenants
+ *     security: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -181,7 +230,7 @@ router.put("/:id", requireAdminAuth, updateTenant);
  *       500:
  *         description: Internal server error
  */
-router.delete("/:id", requireAdminAuth, deleteTenant);
+router.delete("/:id", validate(tenantIdSchema), deleteTenant);
 
 /**
  * @swagger
