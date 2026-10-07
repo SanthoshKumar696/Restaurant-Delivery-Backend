@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 
+import { prisma } from "../database/prisma";
 import { errorResponse } from "../utils/response";
 
 export interface CustomerJwtPayload {
@@ -10,7 +11,7 @@ export interface CustomerJwtPayload {
   role: "CUSTOMER";
 }
 
-export const requireCustomerAuth = (
+export const requireCustomerAuth = async (
   req: Request,
   res: Response,
   next: NextFunction
@@ -66,10 +67,18 @@ export const requireCustomerAuth = (
       );
     }
 
+    const customer = await prisma.customer.findFirst({
+      where: { id: decoded.customerId, tenantId: decoded.tenantId, isActive: true },
+      select: { id: true, phone: true, tenantId: true },
+    });
+    if (!customer) {
+      return errorResponse(res, "Customer account is inactive or not found", 401, "CUSTOMER_NOT_FOUND");
+    }
+
     req.customer = {
-      customerId: decoded.customerId,
-      mobileNumber: decoded.mobileNumber,
-      tenantId: decoded.tenantId,
+      customerId: customer.id,
+      mobileNumber: customer.phone,
+      tenantId: customer.tenantId,
       role: decoded.role,
     };
 

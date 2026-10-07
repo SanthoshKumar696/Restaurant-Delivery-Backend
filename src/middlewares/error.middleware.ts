@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import { errorResponse } from "../utils/response";
+import { HttpError } from "../common/errors/http-error";
 
 export const errorHandler = (
   err: unknown,
@@ -16,6 +17,10 @@ export const errorHandler = (
     customerId: req.customer?.customerId,
     error: err,
   });
+
+  if (err instanceof HttpError) {
+    return errorResponse(res, err.message, err.statusCode, err.code);
+  }
 
   if (err instanceof Error && err.message.startsWith("Tenant not found:")) {
     const tenantId = err.message.slice("Tenant not found: ".length);

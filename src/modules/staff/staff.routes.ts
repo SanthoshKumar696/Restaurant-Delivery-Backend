@@ -29,6 +29,8 @@ const router = Router();
  *     description: Creates a new staff user under an existing tenant. The password is securely hashed using bcrypt.
  *     tags:
  *       - Staff
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -65,6 +67,7 @@ const router = Router();
  *                   - BRANCH_MANAGER
  *                   - STAFF
  *                   - CAPTAIN
+ *                   - MANAGER
  *                   - SUPPORT
  *                 example: STAFF
  *     responses:
@@ -92,6 +95,8 @@ router.post(
  *     description: Returns all staff users across all tenants.
  *     tags:
  *       - Staff
+ *     security:
+ *       - bearerAuth: []
  *     responses:
  *       200:
  *         description: Staff users fetched successfully
@@ -108,6 +113,8 @@ router.get("/", requireAdminAuth, getAllStaff);
  *     description: Returns a single staff user using the numeric staff ID.
  *     tags:
  *       - Staff
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -139,6 +146,8 @@ router.get(
  *     description: Updates an existing staff user. Password is re-hashed when a new password is supplied.
  *     tags:
  *       - Staff
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -175,6 +184,7 @@ router.get(
  *                   - BRANCH_MANAGER
  *                   - STAFF
  *                   - CAPTAIN
+ *                   - MANAGER
  *                   - SUPPORT
  *                 example: BRANCH_MANAGER
  *               isActive:
@@ -205,6 +215,8 @@ router.put(
  *     description: Soft deletes a staff user by setting isActive to false.
  *     tags:
  *       - Staff
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -238,6 +250,8 @@ router.delete(
  *     description: Returns all staff users belonging to a specific tenant.
  *     tags:
  *       - Staff
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: tenantId

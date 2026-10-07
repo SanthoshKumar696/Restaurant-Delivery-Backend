@@ -5,6 +5,7 @@ const staffRoles = [
   "BRANCH_MANAGER",
   "STAFF",
   "CAPTAIN",
+  "MANAGER",
   "SUPPORT",
 ] as const;
 
@@ -17,8 +18,7 @@ export const createStaffSchema = z.object({
       .string()
       .trim()
       .min(1, "Tenant ID is required")
-      .max(20, "Tenant ID must not exceed 20 characters")
-      .regex(/^T\d+$/, "Invalid tenant ID. Example: T001"),
+      .max(20, "Tenant ID must not exceed 20 characters"),
 
     fullName: z
       .string()
@@ -45,6 +45,7 @@ export const createStaffSchema = z.object({
       .max(100, "Password must not exceed 100 characters"),
 
     role: z.enum(staffRoles),
+    isActive: z.boolean().optional(),
   }),
 });
 

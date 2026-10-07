@@ -24,6 +24,7 @@ enum StaffRole {
   BRANCH_MANAGER
   STAFF
   CAPTAIN
+  MANAGER
   SUPPORT
 
   @@map("staff_role")
@@ -114,10 +115,16 @@ enum ReviewStatus {
 }
 
 enum DeliveryStatus {
+  PENDING
+  OFFERED
   ASSIGNED
+  ACCEPTED
   PICKED_UP
+  OUT_FOR_DELIVERY
+  ARRIVED
   DELIVERED
   FAILED
+  CANCELLED
 
   @@map("delivery_status")
 }
@@ -226,6 +233,7 @@ model Tenant {
   captains                 Captain[]                 @relation("Captains_TenantId")
   captainBranchAssignments CaptainBranchAssignment[] @relation("CaptainBranchAssignments_TenantId")
   deliveries               Delivery[]                @relation("Deliveries_TenantId")
+  deliveryOffers           DeliveryOffer[]            @relation("DeliveryOffers_TenantId")
   captainLocations         CaptainLocation[]         @relation("CaptainLocations_TenantId")
   reviews                  Review[]                  @relation("Reviews_TenantId")
   banners                  Banner[]                  @relation("Banners_TenantId")
@@ -1182,6 +1190,7 @@ model Captain {
   tenant                   Tenant                    @relation("Captains_TenantId", fields: [tenantId], references: [id])
   captainBranchAssignments CaptainBranchAssignment[] @relation("CaptainBranchAssignments_CaptainId")
   deliveries               Delivery[]                @relation("Deliveries_CaptainId")
+  deliveryOffers           DeliveryOffer[]            @relation("DeliveryOffers_CaptainId")
   captainLocations         CaptainLocation[]         @relation("CaptainLocations_CaptainId")
 
   @@map("captains")
@@ -1206,17 +1215,49 @@ model Delivery {
   tenantId         String         @map("tenant_id") @db.VarChar(20)
   captainId        Int?           @map("captain_id")
   status           DeliveryStatus @default(ASSIGNED)
-  assignedAt       DateTime       @default(now()) @map("assigned_at") @db.Timestamptz(6)
+  assignedAt       DateTime?      @map("assigned_at") @db.Timestamptz(6)
+  acceptedAt       DateTime?      @map("accepted_at") @db.Timestamptz(6)
   pickedUpAt       DateTime?      @map("picked_up_at") @db.Timestamptz(6)
+  outForDeliveryAt DateTime?      @map("out_for_delivery_at") @db.Timestamptz(6)
+  arrivedAt        DateTime?      @map("arrived_at") @db.Timestamptz(6)
   deliveredAt      DateTime?      @map("delivered_at") @db.Timestamptz(6)
   distanceKm       Decimal?       @map("distance_km") @db.Decimal(6, 2)
   deliveryProofUrl String?        @map("delivery_proof_url") @db.Text
   order            Order          @relation("Deliveries_OrderId", fields: [orderId], references: [id])
   tenant           Tenant         @relation("Deliveries_TenantId", fields: [tenantId], references: [id])
   captain          Captain?       @relation("Deliveries_CaptainId", fields: [captainId], references: [id])
+  offers           DeliveryOffer[] @relation("DeliveryOffers_DeliveryId")
 
   @@index([captainId], map: "idx_deliveries_captain")
   @@map("deliveries")
+}
+
+enum DeliveryOfferStatus {
+  OFFERED
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  CANCELLED
+
+  @@map("delivery_offer_status")
+}
+
+model DeliveryOffer {
+  id         Int                @id @default(autoincrement())
+  deliveryId Int                @map("delivery_id")
+  captainId  Int                @map("captain_id")
+  tenantId   String             @map("tenant_id") @db.VarChar(20)
+  status     DeliveryOfferStatus @default(OFFERED)
+  offeredAt  DateTime           @default(now()) @map("offered_at") @db.Timestamptz(6)
+  respondedAt DateTime?         @map("responded_at") @db.Timestamptz(6)
+  delivery   Delivery           @relation("DeliveryOffers_DeliveryId", fields: [deliveryId], references: [id])
+  captain    Captain            @relation("DeliveryOffers_CaptainId", fields: [captainId], references: [id])
+  tenant     Tenant             @relation("DeliveryOffers_TenantId", fields: [tenantId], references: [id])
+
+  @@unique([deliveryId, captainId])
+  @@index([tenantId, captainId, status], map: "idx_delivery_offers_captain_status")
+  @@index([deliveryId, status], map: "idx_delivery_offers_delivery_status")
+  @@map("delivery_offers")
 }
 
 model CaptainLocation {

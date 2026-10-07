@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 
+import { prisma } from "../database/prisma";
 import { errorResponse } from "../utils/response";
 
 export interface AdminJwtPayload {
@@ -10,7 +11,7 @@ export interface AdminJwtPayload {
   role: "ADMIN";
 }
 
-export const requireAdminAuth = (
+export const requireAdminAuth = async (
   req: Request,
   res: Response,
   next: NextFunction
@@ -68,10 +69,18 @@ export const requireAdminAuth = (
       );
     }
 
+    const admin = await prisma.admin.findFirst({
+      where: { id: decoded.adminId, tenantId: decoded.tenantId, username: decoded.username, isActive: true },
+      select: { id: true, tenantId: true, username: true },
+    });
+    if (!admin) {
+      return errorResponse(res, "Admin account is inactive or not found", 401, "ADMIN_NOT_FOUND");
+    }
+
     req.admin = {
-      adminId: decoded.adminId,
-      username: decoded.username,
-      tenantId: decoded.tenantId,
+      adminId: admin.id,
+      username: admin.username,
+      tenantId: admin.tenantId,
       role: decoded.role,
     };
 

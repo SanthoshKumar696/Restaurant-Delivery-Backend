@@ -258,44 +258,34 @@ export const getBranchReport = async (
     },
   });
 
-  const reports = await Promise.all(
-    branches.map(async (branch) => {
-      const orderWhere: any = {
-        branchId: branch.id,
-      };
+  const orderWhere: any = {
+    branchId: { in: branches.map((branch) => branch.id) },
+    ...(filters.tenantId ? { tenantId: filters.tenantId } : {}),
+  };
+  if (filters.fromDate || filters.toDate) {
+    orderWhere.createdAt = {};
+    if (filters.fromDate) orderWhere.createdAt.gte = filters.fromDate;
+    if (filters.toDate) orderWhere.createdAt.lte = filters.toDate;
+  }
+  const orderTotals = await prisma.order.groupBy({
+    by: ["branchId"],
+    where: orderWhere,
+    _count: { id: true },
+    _sum: { totalAmount: true },
+  });
+  const totalsByBranch = new Map(orderTotals.map((total) => [total.branchId, total]));
 
-      if (filters.fromDate || filters.toDate) {
-        orderWhere.createdAt = {};
-
-        if (filters.fromDate) {
-          orderWhere.createdAt.gte = filters.fromDate;
-        }
-
-        if (filters.toDate) {
-          orderWhere.createdAt.lte = filters.toDate;
-        }
-      }
-
-      const result = await prisma.order.aggregate({
-        where: orderWhere,
-        _count: {
-          id: true,
-        },
-        _sum: {
-          totalAmount: true,
-        },
-      });
-
-      return {
-        branchId: branch.id,
-        branchName: branch.name,
-        tenantId: branch.tenantId,
-        isActive: branch.isActive,
-        totalOrders: result._count.id,
-        totalSales: result._sum.totalAmount ?? 0,
-      };
-    })
-  );
+  const reports = branches.map((branch) => {
+    const total = totalsByBranch.get(branch.id);
+    return {
+      branchId: branch.id,
+      branchName: branch.name,
+      tenantId: branch.tenantId,
+      isActive: branch.isActive,
+      totalOrders: total?._count.id ?? 0,
+      totalSales: total?._sum.totalAmount ?? 0,
+    };
+  });
 
   return reports;
 };

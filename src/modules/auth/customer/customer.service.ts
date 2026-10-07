@@ -298,7 +298,7 @@ export const resendOtp = async (data: ResendOtpInput): Promise<{ message: string
     throw new Error("Invalid phone number format");
   }
 
-  const result = await smsService.resendOtp(phone);
+  const result = await smsService.resendOtp(phone, tenantId, "AUTH");
 
   if (!result.success) {
     throw new Error(result.message);

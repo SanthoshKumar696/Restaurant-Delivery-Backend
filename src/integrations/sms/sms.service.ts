@@ -22,6 +22,8 @@ interface OtpSession {
   lastResendAt?: number;
 }
 
+type OtpPurpose = "AUTH" | "DELIVERY";
+
 class OtpStorage {
   private sessions = new Map<string, OtpSession>();
   private readonly OTP_EXPIRY_MS = 5 * 60 * 1000;
@@ -119,11 +121,11 @@ class SmsService {
     return /^91[6-9]\d{9}$/.test(normalized) || /^[6-9]\d{9}$/.test(normalized);
   }
 
-  private getSessionKey(tenantId: string, phoneNumber: string): string {
-    return `otp_${tenantId}_${this.normalizePhoneNumber(phoneNumber)}`;
+  private getSessionKey(tenantId: string, phoneNumber: string, purpose: OtpPurpose, scopeId?: string): string {
+    return `otp_${purpose}_${tenantId}_${scopeId ?? "default"}_${this.normalizePhoneNumber(phoneNumber)}`;
   }
 
-  async sendOtp(phoneNumber: string, tenantId = "T001"): Promise<{ success: boolean; message: string; code?: string }> {
+  async sendOtp(phoneNumber: string, tenantId = "T001", purpose: OtpPurpose = "AUTH", scopeId?: string): Promise<{ success: boolean; message: string; code?: string }> {
     if (!this.validatePhoneNumber(phoneNumber)) {
       return {
         success: false,
@@ -133,7 +135,7 @@ class SmsService {
     }
 
     const normalized = this.normalizePhoneNumber(phoneNumber);
-    const sessionKey = this.getSessionKey(tenantId, normalized);
+    const sessionKey = this.getSessionKey(tenantId, normalized, purpose, scopeId);
     const existingSession = this.storage.getSession(sessionKey);
 
     if (existingSession && !this.storage.isExpired(existingSession)) {
@@ -144,7 +146,8 @@ class SmsService {
       };
     }
 
-    if (!twoFactorProvider) {
+    const useLocalProvider = !twoFactorProvider || (this.developmentMode && process.env.DELIVERY_TEST_OTP === "true");
+    if (useLocalProvider) {
       if (!this.developmentMode) {
         return {
           success: false,
@@ -183,7 +186,7 @@ class SmsService {
     }
 
     try {
-      const result = await twoFactorProvider.sendOtp(normalized);
+      const result = await twoFactorProvider!.sendOtp(normalized);
       const session: OtpSession = {
         tenantId,
         phoneNumber: this.normalizePhoneForLookup(phoneNumber),
@@ -220,7 +223,7 @@ class SmsService {
     }
   }
 
-  async verifyOtp(phoneNumber: string, otp: string, tenantId = "T001"): Promise<{ success: boolean; message: string; code?: string }> {
+  async verifyOtp(phoneNumber: string, otp: string, tenantId = "T001", purpose: OtpPurpose = "AUTH", scopeId?: string): Promise<{ success: boolean; message: string; code?: string }> {
     if (!this.validatePhoneNumber(phoneNumber)) {
       return {
         success: false,
@@ -230,7 +233,7 @@ class SmsService {
     }
 
     const normalized = this.normalizePhoneNumber(phoneNumber);
-    const sessionKey = this.getSessionKey(tenantId, normalized);
+    const sessionKey = this.getSessionKey(tenantId, normalized, purpose, scopeId);
     const session = this.storage.getSession(sessionKey);
 
     if (!session) {
@@ -261,7 +264,8 @@ class SmsService {
 
     this.storage.incrementAttempts(session);
 
-    if (!twoFactorProvider) {
+    const useLocalProvider = !twoFactorProvider || (this.developmentMode && process.env.DELIVERY_TEST_OTP === "true");
+    if (useLocalProvider) {
       if (this.developmentMode && session.otp === otp.trim()) {
         session.verified = true;
         session.status = "verified";
@@ -278,7 +282,7 @@ class SmsService {
       };
     }
 
-    const isValid = await twoFactorProvider.verifyOtp(session.sessionId, otp.trim(), normalized);
+    const isValid = await twoFactorProvider!.verifyOtp(session.sessionId, otp.trim(), normalized);
 
     if (!isValid) {
       return {
@@ -297,7 +301,7 @@ class SmsService {
     };
   }
 
-  async resendOtp(phoneNumber: string, tenantId = "T001"): Promise<{ success: boolean; message: string; code?: string }> {
+  async resendOtp(phoneNumber: string, tenantId = "T001", purpose: OtpPurpose = "AUTH", scopeId?: string): Promise<{ success: boolean; message: string; code?: string }> {
     if (!this.validatePhoneNumber(phoneNumber)) {
       return {
         success: false,
@@ -307,7 +311,7 @@ class SmsService {
     }
 
     const normalized = this.normalizePhoneNumber(phoneNumber);
-    const sessionKey = this.getSessionKey(tenantId, normalized);
+    const sessionKey = this.getSessionKey(tenantId, normalized, purpose, scopeId);
     const session = this.storage.getSession(sessionKey);
 
     if (!session) {
@@ -330,7 +334,8 @@ class SmsService {
       };
     }
 
-    if (!twoFactorProvider) {
+    const useLocalProvider = !twoFactorProvider || (this.developmentMode && process.env.DELIVERY_TEST_OTP === "true");
+    if (useLocalProvider) {
       if (this.developmentMode) {
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         session.otp = otp;
@@ -377,25 +382,25 @@ class SmsService {
     }
   }
 
-  hasActiveSession(phoneNumber: string, tenantId = "T001"): boolean {
+  hasActiveSession(phoneNumber: string, tenantId = "T001", purpose: OtpPurpose = "AUTH", scopeId?: string): boolean {
     if (!this.validatePhoneNumber(phoneNumber)) {
       return false;
     }
 
     const normalized = this.normalizePhoneNumber(phoneNumber);
-    const sessionKey = this.getSessionKey(tenantId, normalized);
+    const sessionKey = this.getSessionKey(tenantId, normalized, purpose, scopeId);
     const session = this.storage.getSession(sessionKey);
 
     return Boolean(session && !this.storage.isExpired(session));
   }
 
-  getVerifiedSession(phoneNumber: string, tenantId = "T001"): OtpSession | null {
+  getVerifiedSession(phoneNumber: string, tenantId = "T001", purpose: OtpPurpose = "AUTH", scopeId?: string): OtpSession | null {
     if (!this.validatePhoneNumber(phoneNumber)) {
       return null;
     }
 
     const normalized = this.normalizePhoneNumber(phoneNumber);
-    const sessionKey = this.getSessionKey(tenantId, normalized);
+    const sessionKey = this.getSessionKey(tenantId, normalized, purpose, scopeId);
     const session = this.storage.getSession(sessionKey);
 
     if (!session || session.verified === false || this.storage.isExpired(session)) {
@@ -405,14 +410,21 @@ class SmsService {
     return session;
   }
 
-  clearSession(phoneNumber: string, tenantId = "T001"): void {
+  clearSession(phoneNumber: string, tenantId = "T001", purpose: OtpPurpose = "AUTH", scopeId?: string): void {
     if (!this.validatePhoneNumber(phoneNumber)) {
       return;
     }
 
     const normalized = this.normalizePhoneNumber(phoneNumber);
-    const sessionKey = this.getSessionKey(tenantId, normalized);
+    const sessionKey = this.getSessionKey(tenantId, normalized, purpose, scopeId);
     this.storage.deleteSession(sessionKey);
+  }
+
+  getTestOtp(phoneNumber: string, tenantId = "T001", purpose: OtpPurpose = "AUTH", scopeId?: string): string | null {
+    if (process.env.NODE_ENV === "production" || process.env.DELIVERY_TEST_OTP !== "true") return null;
+    const normalized = this.normalizePhoneNumber(phoneNumber);
+    const session = this.storage.getSession(this.getSessionKey(tenantId, normalized, purpose, scopeId));
+    return session?.otp ?? null;
   }
 }
 

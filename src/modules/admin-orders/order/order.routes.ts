@@ -32,6 +32,8 @@ const router = Router();
  *     description: Admin order management API - Returns all orders for the restaurant tenant.
  *     tags:
  *       - Admin Orders
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: query
  *         name: tenantId
@@ -88,6 +90,8 @@ router.get(
  *     description: Admin order management API - Returns orders filtered by status.
  *     tags:
  *       - Admin Orders
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: status
@@ -126,6 +130,8 @@ router.get(
  *     description: Admin order management API - Returns complete order details with customer info and status history.
  *     tags:
  *       - Admin Orders
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -170,6 +176,8 @@ router.get(
  *     description: Admin order management API - Updates order status with validation of allowed transitions.
  *     tags:
  *       - Admin Orders
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -233,6 +241,8 @@ router.patch(
  *     description: Admin order management API - Marks an order as CONFIRMED.
  *     tags:
  *       - Admin Orders
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -280,6 +290,8 @@ router.patch(
  *     description: Admin order management API - Rejects a pending order with optional reason.
  *     tags:
  *       - Admin Orders
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -327,6 +339,8 @@ router.patch(
  *     description: Admin order management API - Cancels an order that has not been completed.
  *     tags:
  *       - Admin Orders
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id

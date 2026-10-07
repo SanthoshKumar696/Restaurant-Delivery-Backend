@@ -7,6 +7,7 @@ export type CreateStaffInput = {
   email?: string;
   password: string;
   role: StaffRole;
+  isActive?: boolean;
 };
 
 export type UpdateStaffInput = {

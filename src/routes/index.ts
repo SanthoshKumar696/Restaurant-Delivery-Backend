@@ -24,12 +24,17 @@ import paymentAdminRoutes from "../modules/payments/payment-admin.routes";
 import adminOrderRoutes from "../modules/admin-orders/order/order.routes";
 import adminAuthRoutes from "../modules/auth/admin/admin.routes";
 import customerAuthRoutes from "../modules/auth/customer/customer.routes";
+import captainRoutes from "../modules/captains/captain.routes";
+import staffAuthRoutes from "../modules/auth/staff/staff.routes";
+import deliveryRoutes from "../modules/deliveries/delivery.routes";
+import deliveryAdminRoutes from "../modules/deliveries/delivery-admin.routes";
 
 const router = Router();
 
 router.use(healthRoutes);
 router.use("/auth", adminAuthRoutes);
 router.use("/auth", customerAuthRoutes);
+router.use("/auth", staffAuthRoutes);
 router.use("/tenants", tenantRoutes);
 router.use("/branches", branchRoutes);
 router.use("/customers", customerRoutes);
@@ -49,6 +54,9 @@ router.use("/payments", paymentRoutes);
 router.use("/admin/payments", paymentAdminRoutes);
 router.use("/orders", orderRoutes);
 router.use("/staff", staffRoutes);
+router.use("/captains", captainRoutes);
+router.use("/delivery", deliveryRoutes);
+router.use("/admin", deliveryAdminRoutes);
 router.use("/reports", reportRoutes);
 router.use("/admin/orders", adminOrderRoutes);
 

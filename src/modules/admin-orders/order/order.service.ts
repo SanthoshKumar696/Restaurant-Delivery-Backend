@@ -1,4 +1,5 @@
 import { prisma } from "../../../database/prisma";
+import { HttpError } from "../../../common/errors/http-error";
 import { awardLoyaltyForCompletedOrder } from "../../loyalty/loyalty.service";
 import {
   AdminOrderListFilter,
@@ -323,16 +324,24 @@ export const updateAdminOrderStatus = async (
     PENDING: ["CONFIRMED", "REJECTED"],
     CONFIRMED: ["PREPARING", "CANCELLED"],
     PREPARING: ["READY", "CANCELLED"],
-    READY: ["OUT_FOR_DELIVERY", "CANCELLED"],
+    READY: ["OUT_FOR_DELIVERY", "COMPLETED", "CANCELLED"],
     OUT_FOR_DELIVERY: ["COMPLETED", "CANCELLED"],
     COMPLETED: [],
     CANCELLED: [],
     REJECTED: [],
   };
 
-  if (!validTransitions[existingOrder.status]?.includes(data.status)) {
-    throw new Error(
-      `Cannot transition from ${existingOrder.status} to ${data.status}`
+  const allowedTransitions = existingOrder.fulfillmentType === "PICKUP" && existingOrder.status === "READY"
+    ? ["COMPLETED", "CANCELLED"]
+    : existingOrder.fulfillmentType === "DELIVERY" && existingOrder.status === "READY"
+      ? ["CANCELLED"]
+      : validTransitions[existingOrder.status];
+
+  if (!allowedTransitions?.includes(data.status)) {
+    throw new HttpError(
+      `Cannot transition from ${existingOrder.status} to ${data.status}`,
+      409,
+      "INVALID_ORDER_TRANSITION"
     );
   }
 
@@ -365,6 +374,17 @@ export const updateAdminOrderStatus = async (
     },
     data: updateData,
   });
+
+  if (data.status === "CANCELLED" && existingOrder.fulfillmentType === "DELIVERY") {
+    await prisma.delivery.updateMany({
+      where: {
+        orderId: id,
+        tenantId,
+        status: { notIn: ["DELIVERED", "FAILED", "CANCELLED"] },
+      },
+      data: { status: "CANCELLED" },
+    });
+  }
 
   if (data.status === "COMPLETED") {
     await awardLoyaltyForCompletedOrder(tenantId, id);

@@ -13,7 +13,8 @@ export const createOrderSchema = z.object({
     customerId: z
       .number()
       .int()
-      .positive("Customer ID must be a positive number"),
+      .positive("Customer ID must be a positive number")
+      .optional(),
 
     fulfillmentType: z.enum(["DELIVERY", "PICKUP"]),
 
@@ -67,6 +68,18 @@ export const createOrderSchema = z.object({
       )
       .min(1, "At least one order item is required"),
   }),
+}).superRefine((data, context) => {
+  if (data.body.fulfillmentType !== "DELIVERY") return;
+
+  if (!data.body.deliveryAddressLine?.trim()) {
+    context.addIssue({ code: "custom", path: ["body", "deliveryAddressLine"], message: "Delivery address is required" });
+  }
+  if (data.body.deliveryLatitude === undefined || data.body.deliveryLatitude < -90 || data.body.deliveryLatitude > 90) {
+    context.addIssue({ code: "custom", path: ["body", "deliveryLatitude"], message: "Valid delivery latitude is required" });
+  }
+  if (data.body.deliveryLongitude === undefined || data.body.deliveryLongitude < -180 || data.body.deliveryLongitude > 180) {
+    context.addIssue({ code: "custom", path: ["body", "deliveryLongitude"], message: "Valid delivery longitude is required" });
+  }
 });
 
 export const getCustomerOrdersSchema = z.object({

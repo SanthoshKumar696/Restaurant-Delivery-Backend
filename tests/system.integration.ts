@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
+import { createServer } from "node:http";
 import jwt from "jsonwebtoken";
+import { io } from "socket.io-client";
 import app from "../src/app";
 import { prisma } from "../src/database/prisma";
 import { awardLoyaltyForCompletedOrder } from "../src/modules/loyalty/loyalty.service";
+import { initializeDeliverySocket } from "../src/realtime/delivery-socket";
 import { createSystemFixtures } from "./system-fixtures";
 
 const fixture = "E2E_V1_20260909";
@@ -100,7 +103,9 @@ const ensurePayment = async (baseUrl: string, token: string, orderId: number) =>
 const completeOrder = async (baseUrl: string, adminToken: string, orderId: number, tenantId: string) => {
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order) throw new Error(`Order ${orderId} not found`);
-  const transitions = ["CONFIRMED", "PREPARING", "READY", "OUT_FOR_DELIVERY", "COMPLETED"] as const;
+  const transitions = order.fulfillmentType === "PICKUP"
+    ? ["CONFIRMED", "PREPARING", "READY", "COMPLETED"] as const
+    : ["CONFIRMED", "PREPARING", "READY", "OUT_FOR_DELIVERY", "COMPLETED"] as const;
   let current = order.status;
   for (const status of transitions) {
     if (current === status) continue;
@@ -108,7 +113,7 @@ const completeOrder = async (baseUrl: string, adminToken: string, orderId: numbe
       PENDING: "CONFIRMED",
       CONFIRMED: "PREPARING",
       PREPARING: "READY",
-      READY: "OUT_FOR_DELIVERY",
+      READY: order.fulfillmentType === "PICKUP" ? "COMPLETED" : "OUT_FOR_DELIVERY",
       OUT_FOR_DELIVERY: "COMPLETED",
     };
     if (allowedAfter[current] !== status) continue;
@@ -123,9 +128,253 @@ const completeOrder = async (baseUrl: string, adminToken: string, orderId: numbe
   assert.equal(current, "COMPLETED");
 };
 
+const testCaptainDeliveryFlow = async (
+  baseUrl: string,
+  adminToken: string,
+  otherAdminToken: string,
+  customerToken: string,
+  customerId: number,
+  branchId: string,
+  productId: number,
+  variantId: number
+) => {
+  const phone = () => String(9000000000 + Math.floor(Math.random() * 90000000));
+  const managerPhone = phone();
+  const manager = await request(baseUrl, "/api/staff", apiJson(adminToken, {
+    tenantId: "T001",
+    fullName: "E2E Manager",
+    phone: managerPhone,
+    email: `${managerPhone}@e2e.invalid`,
+    password: "Manager@123",
+    role: "MANAGER",
+    isActive: true,
+  }));
+  expectStatus(manager, 201, "create manager");
+  assert.equal(manager.body.data.role, "MANAGER");
+  assert.equal(manager.body.data.isActive, true);
+  assert.equal("passwordHash" in manager.body.data, false);
+
+  const captains = [] as Array<{ id: number; phone: string; token: string }>;
+  for (const name of ["Captain 1", "Captain 2", "Captain 3"]) {
+    const captainPhone = phone();
+    const created = await request(baseUrl, "/api/captains", apiJson(adminToken, {
+      fullName: name,
+      phone: captainPhone,
+      email: `${captainPhone}@e2e.invalid`,
+      password: "Captain@123",
+      isActive: true,
+      branchIds: [branchId],
+    }));
+    expectStatus(created, 201, `create ${name}`);
+    assert.equal(created.body.data.role, "CAPTAIN");
+    assert.equal(created.body.data.isActive, true);
+    assert.equal("passwordHash" in created.body.data, false);
+    captains.push({ id: created.body.data.id, phone: captainPhone, token: "" });
+  }
+
+  const crossTenantPhone = phone();
+  const crossTenantCaptain = await request(baseUrl, "/api/captains", apiJson(otherAdminToken, {
+    fullName: "Cross Tenant Captain",
+    phone: crossTenantPhone,
+    email: `${crossTenantPhone}@e2e.invalid`,
+    password: "Captain@123",
+  }));
+  expectStatus(crossTenantCaptain, 201, "create other-tenant Captain");
+  await prisma.captain.updateMany({ where: { tenantId: "T001" }, data: { currentStatus: "OFFLINE" } });
+
+  const staffList = await request(baseUrl, "/api/staff", apiJson(adminToken));
+  expectStatus(staffList, 200, "tenant-scoped staff list");
+  assert.ok(staffList.body.data.some((staff: any) => staff.id === manager.body.data.id));
+  assert.ok(staffList.body.data.every((staff: any) => staff.tenantId === "T001"));
+  assert.ok(staffList.body.data.every((staff: any) => !("passwordHash" in staff)));
+
+  const captainList = await request(baseUrl, "/api/captains", apiJson(adminToken));
+  expectStatus(captainList, 200, "captain list");
+  for (const captain of captains) assert.ok(captainList.body.items.some((item: any) => item.id === captain.id));
+  assert.ok(captainList.body.items.every((item: any) => item.role === "CAPTAIN"));
+  expectStatus(await request(baseUrl, `/api/captains/${captains[0].id}`, apiJson(adminToken)), 200, "captain detail");
+  expectStatus(await request(baseUrl, `/api/staff/${manager.body.data.id}`, apiJson(adminToken)), 200, "staff detail");
+  const foreignCaptain = await request(baseUrl, `/api/captains/${crossTenantCaptain.body.data.id}`, apiJson(adminToken));
+  expectStatus(foreignCaptain, 404, "cross-tenant captain detail");
+
+  const inactive = await request(baseUrl, `/api/captains/${captains[2].id}`, apiJson(adminToken, { isActive: false }, "PUT"));
+  expectStatus(inactive, 200, "deactivate Captain 3");
+  assert.equal(inactive.body.data.isActive, false);
+  const available = await request(baseUrl, "/api/captains/available", apiJson(adminToken));
+  expectStatus(available, 200, "available captains");
+  assert.ok(!available.body.items.some((item: any) => item.id === captains[2].id));
+  const inactiveLogin = await request(baseUrl, "/api/auth/staff/login", apiJson(undefined, {
+    tenantId: "T001",
+    phone: captains[2].phone,
+    password: "Captain@123",
+  }));
+  expectStatus(inactiveLogin, 401, "inactive Captain login denied");
+
+  for (const captain of captains.slice(0, 2)) {
+    const login = await request(baseUrl, "/api/auth/staff/login", apiJson(undefined, {
+      tenantId: "T001",
+      phone: captain.phone,
+      password: "Captain@123",
+    }));
+    expectStatus(login, 200, "Captain login");
+    assert.equal(login.body.data.staff.role, "CAPTAIN");
+    assert.ok(jwt.decode(login.body.data.token)?.toString());
+    const payload = jwt.decode(login.body.data.token) as { staffId: number; tenantId: string; role: string };
+    assert.equal(payload.staffId, captain.id);
+    assert.equal(payload.tenantId, "T001");
+    assert.equal(payload.role, "CAPTAIN");
+    captain.token = login.body.data.token;
+    expectStatus(await request(baseUrl, "/api/staff", apiJson(captain.token)), 401, "Captain denied admin staff API");
+  }
+
+  const invalidDeliveryOrder = await request(baseUrl, "/api/orders", apiJson(customerToken, {
+    tenantId: "T001",
+    branchId,
+    fulfillmentType: "DELIVERY",
+    items: [{ productId, variantId, quantity: 1 }],
+  }));
+  expectStatus(invalidDeliveryOrder, 400, "delivery requires address and coordinates");
+
+  const createdOrder = await request(baseUrl, "/api/orders", apiJson(customerToken, {
+    tenantId: "T001",
+    branchId,
+    fulfillmentType: "DELIVERY",
+    deliveryAddressLine: "E2E Delivery Address",
+    deliveryLatitude: 13.0827,
+    deliveryLongitude: 80.2707,
+    deliveryPhone: "9000000001",
+    notes: `${fixture} Captain delivery flow`,
+    items: [{ productId, variantId, quantity: 1 }],
+  }));
+  expectStatus(createdOrder, 201, "create delivery order");
+  const orderId = createdOrder.body.data.id as number;
+  const delivery = await prisma.delivery.findUnique({ where: { orderId } });
+  assert.ok(delivery, "delivery order must create one pending delivery");
+  assert.equal(delivery.status, "PENDING");
+  assert.equal(Number(createdOrder.body.data.deliveryLatitude), 13.0827);
+  assert.equal(Number(createdOrder.body.data.deliveryLongitude), 80.2707);
+  expectStatus(await request(baseUrl, `/api/delivery/${delivery.id}/assign`, apiJson(adminToken, { captainId: captains[0].id })), 409, "delivery cannot be assigned before order ready");
+
+  const accepted = await request(baseUrl, `/api/admin/orders/${orderId}/accept`, apiJson(adminToken, { tenantId: "T001" }, "PATCH"));
+  expectStatus(accepted, 200, "accept delivery order");
+  for (const status of ["PREPARING", "READY"]) {
+    const updated = await request(baseUrl, `/api/admin/orders/${orderId}/status`, apiJson(adminToken, { tenantId: "T001", status }, "PATCH"));
+    expectStatus(updated, 200, `set delivery order ${status}`);
+  }
+
+  expectStatus(await request(baseUrl, `/api/delivery/${delivery!.id}/assign`, apiJson(adminToken, { captainId: captains[2].id })), 404, "inactive Captain cannot be assigned");
+  expectStatus(await request(baseUrl, `/api/delivery/${delivery!.id}/assign`, apiJson(adminToken, { captainId: crossTenantCaptain.body.data.id })), 404, "cross-tenant Captain cannot be assigned");
+  const captainSocket = io(baseUrl, { auth: { token: captains[0].token }, transports: ["websocket"] });
+  try {
+    await new Promise<void>((resolve, reject) => {
+      captainSocket.once("connect", resolve);
+      captainSocket.once("connect_error", reject);
+    });
+    const assignmentEvent = new Promise<any>((resolve) => captainSocket.once("delivery:assigned", resolve));
+    const assignment = await request(baseUrl, `/api/delivery/${delivery!.id}/assign`, apiJson(adminToken, { captainId: captains[0].id }));
+    expectStatus(assignment, 200, "assign delivery after ready");
+    assert.equal(assignment.body.data.status, "ASSIGNED");
+    assert.equal(assignment.body.data.captain.id, captains[0].id);
+    assert.deepEqual(await assignmentEvent, { deliveryId: delivery!.id, orderId });
+  } finally {
+    captainSocket.disconnect();
+  }
+  expectStatus(await request(baseUrl, `/api/delivery/${delivery!.id}/assign`, apiJson(adminToken, { captainId: captains[1].id })), 409, "duplicate assignment denied");
+  expectStatus(await request(baseUrl, `/api/captains/${captains[0].id}`, apiJson(adminToken, { isActive: false }, "PUT")), 409, "assigned Captain cannot be deactivated");
+  expectStatus(await request(baseUrl, `/api/staff/${captains[0].id}`, apiJson(adminToken, { role: "STAFF" }, "PUT")), 409, "assigned Captain role cannot be changed");
+  expectStatus(await request(baseUrl, `/api/delivery/${delivery!.id}`, apiJson(captains[1].token)), 403, "other Captain denied delivery detail");
+  const myDeliveries = await request(baseUrl, "/api/delivery/my-deliveries", apiJson(captains[0].token));
+  expectStatus(myDeliveries, 200, "Captain delivery list");
+  assert.ok(myDeliveries.body.items.some((item: any) => item.id === delivery!.id));
+
+  for (const action of ["accept", "picked-up", "out-for-delivery"] as const) {
+    const result = await request(baseUrl, `/api/delivery/${delivery!.id}/${action}`, apiJson(captains[0].token, {}, "POST"));
+    expectStatus(result, 200, `Captain ${action}`);
+  }
+  const location = await request(baseUrl, `/api/delivery/${delivery!.id}/location`, apiJson(captains[0].token, { latitude: 13.08, longitude: 80.26 }));
+  expectStatus(location, 200, "Captain GPS update");
+  assert.equal(location.body.data.deliveryId, delivery!.id);
+  expectStatus(await request(baseUrl, `/api/delivery/${delivery!.id}/location`, apiJson(captains[1].token, { latitude: 13.08, longitude: 80.26 })), 403, "other Captain GPS denied");
+  expectStatus(await request(baseUrl, `/api/delivery/${delivery!.id}/location`, apiJson(captains[0].token, { latitude: 100, longitude: 0 })), 400, "invalid GPS rejected");
+
+  const customerTracking = await request(baseUrl, `/api/orders/customer/${customerId}/${orderId}/delivery`, apiJson(customerToken));
+  expectStatus(customerTracking, 200, "customer tracking");
+  assert.equal(customerTracking.body.data.deliveryId, delivery!.id);
+  assert.equal(customerTracking.body.data.currentLocation.latitude.toString(), "13.08");
+  const otherCustomerTracking = await request(baseUrl, `/api/orders/customer/${customerId + 999}/${orderId}/delivery`, apiJson(customerToken));
+  expectStatus(otherCustomerTracking, 404, "customer ID mismatch tracking denied");
+  const adminTracking = await request(baseUrl, `/api/delivery/admin/${delivery!.id}`, apiJson(adminToken));
+  expectStatus(adminTracking, 200, "admin tracking");
+  assert.equal(Number(adminTracking.body.data.currentLocation.longitude), 80.26);
+
+  const customerSocket = io(baseUrl, { auth: { token: customerToken }, transports: ["websocket"] });
+  const adminSocket = io(baseUrl, { auth: { token: adminToken }, transports: ["websocket"] });
+  try {
+    await Promise.all([customerSocket, adminSocket].map((socket) => new Promise<void>((resolve, reject) => {
+      socket.once("connect", () => resolve());
+      socket.once("connect_error", reject);
+    })));
+    assert.equal(await customerSocket.emitWithAck("delivery:subscribe", { orderId }), true);
+    assert.equal(await customerSocket.emitWithAck("delivery:subscribe", { orderId: orderId + 100000 }), false);
+
+    const nextCustomerLocation = new Promise<any>((resolve) => customerSocket.once("delivery:location_updated", resolve));
+    const nextAdminLocation = new Promise<any>((resolve) => adminSocket.once("delivery:location_updated", resolve));
+    const realtimeUpdate = await request(baseUrl, `/api/delivery/${delivery!.id}/location`, apiJson(captains[0].token, { latitude: 13.081, longitude: 80.269 }));
+    expectStatus(realtimeUpdate, 200, "realtime Captain GPS update");
+    const [customerEvent, adminEvent] = await Promise.all([nextCustomerLocation, nextAdminLocation]);
+    for (const event of [customerEvent, adminEvent]) {
+      assert.deepEqual(Object.keys(event).sort(), ["deliveryId", "latitude", "longitude", "timestamp"]);
+      assert.equal(event.deliveryId, delivery!.id);
+      assert.equal(event.latitude, 13.081);
+      assert.equal(event.longitude, 80.269);
+    }
+
+    const customerStatus = new Promise<any>((resolve) => customerSocket.once("delivery:status_updated", resolve));
+    const adminStatus = new Promise<any>((resolve) => adminSocket.once("delivery:status_updated", resolve));
+    const arrived = await request(baseUrl, `/api/delivery/${delivery!.id}/arrived`, apiJson(captains[0].token, {}, "POST"));
+    expectStatus(arrived, 200, "Captain arrived");
+    const [customerStatusEvent, adminStatusEvent] = await Promise.all([customerStatus, adminStatus]);
+    for (const event of [customerStatusEvent, adminStatusEvent]) {
+      assert.deepEqual(Object.keys(event).sort(), ["deliveryId", "status", "timestamp"]);
+      assert.equal(event.deliveryId, delivery!.id);
+      assert.equal(event.status, "ARRIVED");
+    }
+  } finally {
+    customerSocket.disconnect();
+    adminSocket.disconnect();
+  }
+
+  const badOtp = await request(baseUrl, `/api/delivery/${delivery!.id}/complete`, apiJson(captains[0].token, { otp: "000000" }));
+  expectStatus(badOtp, 400, "invalid delivery OTP rejected");
+
+  const pickupOrder = await request(baseUrl, "/api/orders", apiJson(customerToken, {
+    tenantId: "T001",
+    branchId,
+    fulfillmentType: "PICKUP",
+    notes: `${fixture} Captain flow pickup no delivery`,
+    items: [{ productId, variantId, quantity: 1 }],
+  }));
+  expectStatus(pickupOrder, 201, "create pickup order");
+  assert.equal(await prisma.delivery.findUnique({ where: { orderId: pickupOrder.body.data.id } }), null);
+  expectStatus(await request(baseUrl, `/api/orders/customer/${customerId}/${pickupOrder.body.data.id}/delivery`, apiJson(customerToken)), 404, "pickup has no tracking");
+  expectStatus(await request(baseUrl, `/api/admin/orders/${pickupOrder.body.data.id}/accept`, apiJson(adminToken, { tenantId: "T001" }, "PATCH")), 200, "accept pickup order");
+  for (const status of ["PREPARING", "READY", "COMPLETED"]) {
+    expectStatus(
+      await request(baseUrl, `/api/admin/orders/${pickupOrder.body.data.id}/status`, apiJson(adminToken, { tenantId: "T001", status }, "PATCH")),
+      200,
+      `complete pickup order ${status}`
+    );
+  }
+  assert.equal((await prisma.order.findUnique({ where: { id: pickupOrder.body.data.id }, select: { status: true } }))?.status, "COMPLETED");
+
+  return { orderId, deliveryId: delivery!.id, captainId: captains[0].id, captains };
+};
+
 const main = async () => {
   const fixtures = await createSystemFixtures();
-  const server = app.listen(0);
+  const server = createServer(app);
+  initializeDeliverySocket(server);
+  server.listen(0);
   await new Promise<void>((resolve) => server.once("listening", () => resolve()));
   const baseUrl = `http://127.0.0.1:${(server.address() as any).port}`;
 
@@ -190,6 +439,16 @@ const main = async () => {
     if (!t1Chicken) throw new Error("T001 chicken fixture missing");
     const t1Full = await prisma.productVariant.findFirst({ where: { tenantId: "T001", productId: t1Chicken.id, name: "Full" } });
     if (!t1Full) throw new Error("T001 full variant missing");
+    const captainDeliveryFlow = await testCaptainDeliveryFlow(
+      baseUrl,
+      t1AdminToken,
+      t2AdminToken,
+      t1CustomerToken,
+      t1Customer.id,
+      fixtures.t1Branch.id,
+      t1Chicken.id,
+      t1Full.id
+    );
     const t1Order = await ensureOrder(baseUrl, t1CustomerToken, t1Customer.id, "T001", fixtures.t1Branch.id, t1Chicken.id, `${fixture} T001 order`, t1Full.id);
     assert.equal(Number(t1Order.subtotal ?? t1Order.totalAmount), 280);
     await ensurePayment(baseUrl, t1CustomerToken, t1Order.id);
@@ -307,7 +566,7 @@ const main = async () => {
       select: { branchId: true, priceOverride: true },
     });
     assert.equal(branchPrices.length, 3);
-    console.log(JSON.stringify({ passed: true, t1OrderId: t1Order.id, t2OrderIds: t2Orders.map((order: any) => order.id), t1ReviewId: review.id, t1Points: loyalty.body.data.pointsBalance, branchPrices: branchPrices.map(row => ({ branchId: row.branchId, price: Number(row.priceOverride) })) }));
+    console.log(JSON.stringify({ passed: true, t1OrderId: t1Order.id, captainDeliveryFlow, t2OrderIds: t2Orders.map((order: any) => order.id), t1ReviewId: review.id, t1Points: loyalty.body.data.pointsBalance, branchPrices: branchPrices.map(row => ({ branchId: row.branchId, price: Number(row.priceOverride) })) }));
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     await prisma.$disconnect();

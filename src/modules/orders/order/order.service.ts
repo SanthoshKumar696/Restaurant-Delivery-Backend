@@ -287,25 +287,28 @@ export const createOrder = async (data: CreateOrderInput) => {
       totalAmount,
 
       deliveryAddressLine:
-        data.deliveryAddressLine,
+        data.fulfillmentType === "DELIVERY" ? data.deliveryAddressLine : null,
 
       deliveryLandmark:
-        data.deliveryLandmark,
+        data.fulfillmentType === "DELIVERY" ? data.deliveryLandmark : null,
 
       deliveryLatitude:
-        data.deliveryLatitude,
+        data.fulfillmentType === "DELIVERY" ? data.deliveryLatitude : null,
 
       deliveryLongitude:
-        data.deliveryLongitude,
+        data.fulfillmentType === "DELIVERY" ? data.deliveryLongitude : null,
 
       deliveryPhone:
-        data.deliveryPhone,
+        data.fulfillmentType === "DELIVERY" ? data.deliveryPhone : null,
 
       notes: data.notes,
 
       orderItems: {
         create: orderItems,
       },
+      ...(data.fulfillmentType === "DELIVERY"
+        ? { delivery: { create: { tenantId: data.tenantId, status: "PENDING" } } }
+        : {}),
     },
 
     include: {
@@ -369,28 +372,6 @@ export const getCustomerOrders = async (
       fulfillmentType: true,
       totalAmount: true,
       placedAt: true,
-    },
-  });
-};
-
-// -----------------------------------
-// GET ALL ORDERS (DEPRECATED - DO NOT USE)
-// -----------------------------------
-
-export const getAllOrders = async () => {
-  // This function should not be used for customer endpoints
-  // It returns all orders from all customers
-  console.warn(
-    "WARNING: getAllOrders() should not be used for customer-facing APIs. Use getCustomerOrders() instead."
-  );
-
-  return prisma.order.findMany({
-    orderBy: {
-      placedAt: "desc",
-    },
-
-    include: {
-      orderItems: true,
     },
   });
 };

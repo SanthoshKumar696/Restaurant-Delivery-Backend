@@ -18,7 +18,10 @@ export const createStaff = async (
   next: NextFunction
 ) => {
   try {
-    const staff = await createStaffService(req.body);
+    const staff = await createStaffService({
+      ...req.body,
+      tenantId: req.admin!.tenantId,
+    });
 
     return res.status(201).json({
       success: true,
@@ -34,12 +37,12 @@ export const createStaff = async (
  * GET ALL STAFF USERS
  */
 export const getAllStaff = async (
-  _req: Request,
+  req: Request,
   res: Response,
   next: NextFunction
 ) => {
   try {
-    const staffUsers = await getAllStaffService();
+    const staffUsers = await getAllStaffService(req.admin!.tenantId);
 
     return res.status(200).json({
       success: true,
@@ -61,7 +64,8 @@ export const getStaffById = async (
 ) => {
   try {
     const staff = await getStaffByIdService(
-      Number(req.params.id)
+      Number(req.params.id),
+      req.admin!.tenantId
     );
 
     return res.status(200).json({
@@ -83,9 +87,7 @@ export const getStaffByTenant = async (
   next: NextFunction
 ) => {
   try {
-    const staffUsers = await getStaffByTenantService(
-      String(req.params.tenantId)
-    );
+    const staffUsers = await getStaffByTenantService(req.admin!.tenantId);
 
     return res.status(200).json({
       success: true,
@@ -108,6 +110,7 @@ export const updateStaff = async (
   try {
     const staff = await updateStaffService(
       Number(req.params.id),
+      req.admin!.tenantId,
       req.body
     );
 
@@ -131,7 +134,8 @@ export const deleteStaff = async (
 ) => {
   try {
     const staff = await deleteStaffService(
-      Number(req.params.id)
+      Number(req.params.id),
+      req.admin!.tenantId
     );
 
     return res.status(200).json({

@@ -13,6 +13,11 @@ declare global {
         tenantId: string;
         role: "CUSTOMER";
       };
+      staff?: {
+        staffId: number;
+        tenantId: string;
+        role: import("@prisma/client").StaffRole;
+      };
     }
   }
 }

@@ -16,6 +16,8 @@ import {
   getOrderByIdSchema,
   cancelOrderSchema,
 } from "./order.validation";
+import { getCustomerDelivery, sendDeliveryOtp } from "../../deliveries/delivery.controller";
+import { customerDeliverySchema } from "../../deliveries/delivery.validation";
 
 const router = Router();
 
@@ -196,6 +198,20 @@ router.get(
   requireCustomerAuth,
   validate(getOrderByIdSchema),
   getOrderById
+);
+
+router.get(
+  "/customer/:customerId/:id/delivery",
+  requireCustomerAuth,
+  validate(customerDeliverySchema),
+  getCustomerDelivery
+);
+
+router.post(
+  "/customer/:customerId/:id/delivery-otp",
+  requireCustomerAuth,
+  validate(customerDeliverySchema),
+  sendDeliveryOtp
 );
 
 /**

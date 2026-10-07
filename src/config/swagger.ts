@@ -33,6 +33,12 @@ const options: swaggerJSDoc.Options = {
           bearerFormat: "JWT",
           description: "JWT token from customer login. Format: Authorization: Bearer <token>",
         },
+        staffAuth: {
+          type: "http",
+          scheme: "bearer",
+          bearerFormat: "JWT",
+          description: "JWT token from staff login. Captain APIs require role CAPTAIN.",
+        },
       },
     },
 
@@ -154,6 +160,14 @@ for (const [path, definition] of Object.entries((swaggerSpec as { paths?: Record
     for (const operation of Object.values(definition ?? {})) {
       if (operation && typeof operation === "object" && !("$ref" in operation)) {
         (operation as { security?: unknown }).security = [{ customerAuth: [] }];
+      }
+    }
+  }
+
+  if (/^\/api\/(admin\/orders|staff)(\/|$)/.test(path)) {
+    for (const operation of Object.values(definition ?? {})) {
+      if (operation && typeof operation === "object" && !("$ref" in operation)) {
+        (operation as { security?: unknown }).security = [{ bearerAuth: [] }];
       }
     }
   }
