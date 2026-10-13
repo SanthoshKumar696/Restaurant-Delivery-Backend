@@ -94,6 +94,10 @@ const options: swaggerJSDoc.Options = {
         description: "Staff management APIs",
       },
       {
+        name: "Captains",
+        description: "Captain management and assignment APIs",
+      },
+      {
         name: "Tenants",
         description: "Tenant/Restaurant management APIs",
       },

@@ -37,67 +37,227 @@ const router = Router();
  *   get:
  *     summary: List deliveries assigned to the authenticated Captain
  *     tags: [Deliveries]
- *     security: [{ staffAuth: [] }]
+ *     security:
+ *       - staffAuth: []
+ *     responses:
+ *       200:
+ *         description: Assigned deliveries fetched successfully
  * /api/delivery/admin:
  *   get:
  *     summary: List deliveries for the authenticated admin tenant
  *     tags: [Deliveries]
- *     security: [{ bearerAuth: [] }]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Admin deliveries fetched successfully
  * /api/delivery/admin/{id}:
  *   get:
  *     summary: Get delivery details and latest location for the admin tenant
  *     tags: [Deliveries]
- *     security: [{ bearerAuth: [] }]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           example: 1
+ *     responses:
+ *       200:
+ *         description: Delivery details fetched successfully
  * /api/delivery/{id}/assign:
  *   post:
  *     summary: Manually assign a ready delivery to a Captain
  *     tags: [Deliveries]
- *     security: [{ bearerAuth: [] }]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           example: 4
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - captainId
+ *             properties:
+ *               captainId:
+ *                 type: integer
+ *                 example: 12
+ *     responses:
+ *       200:
+ *         description: Captain assigned successfully
  * /api/delivery/{id}:
  *   get:
  *     summary: Get a delivery assigned to the authenticated Captain
  *     tags: [Deliveries]
- *     security: [{ staffAuth: [] }]
+ *     security:
+ *       - staffAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           example: 4
+ *     responses:
+ *       200:
+ *         description: Delivery fetched successfully
  * /api/delivery/{id}/accept:
  *   post:
  *     summary: Accept an assigned delivery
  *     tags: [Deliveries]
- *     security: [{ staffAuth: [] }]
+ *     security:
+ *       - staffAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           example: 4
+ *     responses:
+ *       200:
+ *         description: Delivery accepted
  * /api/delivery/{id}/picked-up:
  *   post:
  *     summary: Confirm restaurant pickup
  *     tags: [Deliveries]
- *     security: [{ staffAuth: [] }]
+ *     security:
+ *       - staffAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           example: 4
  * /api/delivery/{id}/out-for-delivery:
  *   post:
  *     summary: Start delivery and enable tracking
  *     tags: [Deliveries]
- *     security: [{ staffAuth: [] }]
+ *     security:
+ *       - staffAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           example: 4
  * /api/delivery/{id}/location:
  *   post:
  *     summary: Record Captain GPS coordinates
  *     tags: [Deliveries]
- *     security: [{ staffAuth: [] }]
+ *     security:
+ *       - staffAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           example: 4
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - latitude
+ *               - longitude
+ *             properties:
+ *               latitude:
+ *                 type: number
+ *                 example: 13.0827
+ *               longitude:
+ *                 type: number
+ *                 example: 80.2707
  * /api/delivery/{id}/arrived:
  *   post:
  *     summary: Mark delivery arrived
  *     tags: [Deliveries]
- *     security: [{ staffAuth: [] }]
+ *     security:
+ *       - staffAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           example: 4
  * /api/delivery/{id}/complete:
  *   post:
  *     summary: Complete an arrived delivery with customer OTP
  *     tags: [Deliveries]
- *     security: [{ staffAuth: [] }]
+ *     security:
+ *       - staffAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           example: 4
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - otp
+ *             properties:
+ *               otp:
+ *                 type: string
+ *                 example: "123456"
  * /api/delivery/customer/{customerId}/{id}:
  *   get:
  *     summary: Get tracking for the authenticated customer's delivery
  *     tags: [Deliveries]
- *     security: [{ customerAuth: [] }]
+ *     security:
+ *       - customerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: customerId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           example: 42
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           example: 4
  * /api/delivery/customer/{customerId}/{id}/otp:
  *   post:
  *     summary: Send delivery completion OTP to the order phone
  *     tags: [Deliveries]
- *     security: [{ customerAuth: [] }]
+ *     security:
+ *       - customerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: customerId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           example: 42
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           example: 4
  */
 router.get("/my-deliveries", requireCaptainAuth, getMyDeliveries);
 router.get("/dashboard", requireCaptainAuth, getMyDashboard);
