@@ -248,19 +248,47 @@ const testCaptainDeliveryFlow = async (
   }));
   expectStatus(createdOrder, 201, "create delivery order");
   const orderId = createdOrder.body.data.id as number;
+  const pendingOrders = await request(baseUrl, "/api/admin/orders?tenantId=T001&status=PENDING", apiJson(adminToken));
+  expectStatus(pendingOrders, 200, "admin pending order list");
+  assert.ok(pendingOrders.body.data.some((order: any) => order.id === orderId));
   const delivery = await prisma.delivery.findUnique({ where: { orderId } });
   assert.ok(delivery, "delivery order must create one pending delivery");
   assert.equal(delivery.status, "PENDING");
   assert.equal(Number(createdOrder.body.data.deliveryLatitude), 13.0827);
   assert.equal(Number(createdOrder.body.data.deliveryLongitude), 80.2707);
   expectStatus(await request(baseUrl, `/api/delivery/${delivery.id}/assign`, apiJson(adminToken, { captainId: captains[0].id })), 409, "delivery cannot be assigned before order ready");
+  const pendingReady = await request(baseUrl, `/api/admin/orders/${orderId}/status`, apiJson(adminToken, { tenantId: "T001", status: "READY" }, "PATCH"));
+  expectStatus(pendingReady, 409, "pending order cannot skip to READY");
+  assert.equal(pendingReady.body.error.code, "INVALID_ORDER_TRANSITION");
+  assert.equal((await prisma.order.findUniqueOrThrow({ where: { id: orderId } })).status, "PENDING");
+  const invalidStatus = await request(baseUrl, `/api/admin/orders/${orderId}/status`, apiJson(adminToken, { tenantId: "T001", status: "NOT_A_STATUS" }, "PATCH"));
+  expectStatus(invalidStatus, 400, "invalid status is rejected");
+  assert.equal((await prisma.order.findUniqueOrThrow({ where: { id: orderId } })).status, "PENDING");
 
   const accepted = await request(baseUrl, `/api/admin/orders/${orderId}/accept`, apiJson(adminToken, { tenantId: "T001" }, "PATCH"));
   expectStatus(accepted, 200, "accept delivery order");
+  assert.equal(accepted.body.data.status, "CONFIRMED");
+  const skippedPreparing = await request(baseUrl, `/api/admin/orders/${orderId}/status`, apiJson(adminToken, { tenantId: "T001", status: "READY" }, "PATCH"));
+  expectStatus(skippedPreparing, 409, "confirmed order must pass through PREPARING");
+  assert.equal(skippedPreparing.body.error.code, "INVALID_ORDER_TRANSITION");
+  assert.equal(skippedPreparing.body.message, "Order must be moved to PREPARING before it can be marked READY");
+  const confirmedOrder = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+  assert.equal(confirmedOrder.status, "CONFIRMED");
+  assert.equal(confirmedOrder.readyAt, null);
+  assert.equal((await prisma.delivery.findUniqueOrThrow({ where: { orderId } })).status, "PENDING");
   for (const status of ["PREPARING", "READY"]) {
     const updated = await request(baseUrl, `/api/admin/orders/${orderId}/status`, apiJson(adminToken, { tenantId: "T001", status }, "PATCH"));
     expectStatus(updated, 200, `set delivery order ${status}`);
+    assert.equal(updated.body.data.status, status, `PATCH response reports ${status}`);
   }
+  assert.equal((await prisma.delivery.findUniqueOrThrow({ where: { orderId } })).status, "PENDING", "READY must not prematurely advance delivery status");
+  const readyOrder = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+  assert.equal(readyOrder.status, "READY", "READY status is persisted");
+  assert.ok(readyOrder.readyAt, "READY timestamp is persisted");
+  const readyOrderDetails = await request(baseUrl, `/api/admin/orders/${orderId}?tenantId=T001`, apiJson(adminToken));
+  expectStatus(readyOrderDetails, 200, "retrieve order after READY transition");
+  assert.equal(readyOrderDetails.body.data.status, "READY", "Admin Orders detail reflects READY status");
+  assert.ok(readyOrderDetails.body.data.readyAt, "Admin Orders detail includes READY timestamp");
 
   expectStatus(await request(baseUrl, `/api/delivery/${delivery!.id}/assign`, apiJson(adminToken, { captainId: captains[2].id })), 404, "inactive Captain cannot be assigned");
   expectStatus(await request(baseUrl, `/api/delivery/${delivery!.id}/assign`, apiJson(adminToken, { captainId: crossTenantCaptain.body.data.id })), 404, "cross-tenant Captain cannot be assigned");
@@ -366,6 +394,10 @@ const testCaptainDeliveryFlow = async (
     );
   }
   assert.equal((await prisma.order.findUnique({ where: { id: pickupOrder.body.data.id }, select: { status: true } }))?.status, "COMPLETED");
+  const terminalTransition = await request(baseUrl, `/api/admin/orders/${pickupOrder.body.data.id}/status`, apiJson(adminToken, { tenantId: "T001", status: "READY" }, "PATCH"));
+  expectStatus(terminalTransition, 409, "terminal order cannot transition back to READY");
+  assert.equal(terminalTransition.body.error.code, "INVALID_ORDER_TRANSITION");
+  assert.equal((await prisma.order.findUniqueOrThrow({ where: { id: pickupOrder.body.data.id } })).status, "COMPLETED");
 
   return { orderId, deliveryId: delivery!.id, captainId: captains[0].id, captains };
 };

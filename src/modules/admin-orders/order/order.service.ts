@@ -425,7 +425,9 @@ export const updateAdminOrderStatus = async (
 
   if (!allowedTransitions?.includes(data.status)) {
     throw new HttpError(
-      `Cannot transition from ${existingOrder.status} to ${data.status}`,
+      existingOrder.status === "CONFIRMED" && data.status === "READY"
+        ? "Order must be moved to PREPARING before it can be marked READY"
+        : `Cannot transition from ${existingOrder.status} to ${data.status}`,
       409,
       "INVALID_ORDER_TRANSITION"
     );

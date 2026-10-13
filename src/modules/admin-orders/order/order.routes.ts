@@ -302,7 +302,7 @@ router.get(
  * /api/admin/orders/{id}/status:
  *   patch:
  *     summary: Update order status
- *     description: Admin order management API - Updates order status with validation of allowed transitions.
+ *     description: Updates order status using the existing status workflow. Delivery orders must progress through CONFIRMED, PREPARING, then READY; skipping a transition is rejected.
  *     tags:
  *       - Admin Orders
  *     security:
@@ -338,7 +338,7 @@ router.get(
  *                   - COMPLETED
  *                   - CANCELLED
  *                   - REJECTED
- *                 example: CONFIRMED
+ *                 example: READY
  *               note:
  *                 type: string
  *                 example: Order accepted by restaurant
@@ -349,7 +349,9 @@ router.get(
  *       200:
  *         description: Order status updated successfully
  *       400:
- *         description: Invalid status transition or validation failed
+ *         description: Invalid status value or request validation failed
+ *       409:
+ *         description: Invalid order status transition; CONFIRMED orders must move to PREPARING before READY.
  *       404:
  *         description: Order not found
  *       500:
