@@ -18,7 +18,7 @@ export const createCaptainSchema = z.object({
 });
 
 export const updateCaptainSchema = z.object({
-  params: z.object({ id: z.coerce.number().int().positive() }),
+  params: z.object({ captainId: z.coerce.number().int().positive() }),
   body: z.object({
     fullName: captainFields.fullName.optional(),
     phone: captainFields.phone.optional(),
@@ -34,7 +34,7 @@ export const updateCaptainSchema = z.object({
 });
 
 export const captainIdSchema = z.object({
-  params: z.object({ id: z.coerce.number().int().positive() }),
+  params: z.object({ captainId: z.coerce.number().int().positive() }),
 });
 
 export const captainAvailabilitySchema = z.object({

@@ -60,7 +60,7 @@ export const getAvailableCaptains = async (_req: Request, res: Response, next: N
 
 export const getCaptainById = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const captain = await getCaptainByIdService(Number(req.params.id), req.admin!.tenantId);
+    const captain = await getCaptainByIdService(Number(req.params.captainId), req.admin!.tenantId);
     return res.status(200).json({ success: true, message: "Captain fetched successfully", data: captain });
   } catch (error) {
     next(error);
@@ -69,7 +69,7 @@ export const getCaptainById = async (req: Request, res: Response, next: NextFunc
 
 export const updateCaptain = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const captain = await updateCaptainService(Number(req.params.id), req.admin!.tenantId, req.body);
+    const captain = await updateCaptainService(Number(req.params.captainId), req.admin!.tenantId, req.body);
     return res.status(200).json({ success: true, message: "Captain updated successfully", data: captain });
   } catch (error) {
     next(error);

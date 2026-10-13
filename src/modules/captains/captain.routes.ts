@@ -70,7 +70,8 @@ const router = Router();
  *       201:
  *         description: Captain created successfully
  *   get:
- *     summary: List tenant Captains
+ *     summary: List tenant Captains and their Captain IDs
+ *     description: Each item's id is captainId, the ID to use when assigning a delivery or filtering GET /api/delivery/admin. The ID is also the linked StaffUser.id.
  *     tags: [Captains]
  *     security:
  *       - bearerAuth: []
@@ -80,21 +81,77 @@ const router = Router();
  * /api/captains/available:
  *   get:
  *     summary: List active Captains without an active delivery
+ *     description: Each item's id is captainId, suitable for the captainId request body in assignment.
  *     tags: [Captains]
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
  *         description: Available captains fetched successfully
- * /api/captains/{id}:
+ * /api/captains/me:
  *   get:
- *     summary: Get a tenant Captain
+ *     summary: Get the authenticated Captain profile
+ *     description: The Captain ID is derived from the staffAuth token's staffId; it is not supplied as a path or query parameter.
+ *     tags: [Captains]
+ *     security:
+ *       - staffAuth: []
+ *     responses:
+ *       200:
+ *         description: Captain profile, including its Captain ID.
+ *       401:
+ *         description: Staff authentication is required
+ *       403:
+ *         description: Captain role is required
+ * /api/captains/availability:
+ *   get:
+ *     summary: Get the authenticated Captain's availability
+ *     description: Captain identity is derived from staffAuth; no captainId is accepted.
+ *     tags: [Captains]
+ *     security:
+ *       - staffAuth: []
+ *     responses:
+ *       200:
+ *         description: Captain availability
+ *       401:
+ *         description: Staff authentication is required
+ *       403:
+ *         description: Captain role is required
+ *   put:
+ *     summary: Update the authenticated Captain's availability
+ *     description: Captain identity is derived from staffAuth. Request body contains status AVAILABLE or OFFLINE.
+ *     tags: [Captains]
+ *     security:
+ *       - staffAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [status]
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [AVAILABLE, OFFLINE]
+ *     responses:
+ *       200:
+ *         description: Captain availability updated
+ *       400:
+ *         description: Invalid availability status
+ *       401:
+ *         description: Staff authentication is required
+ *       403:
+ *         description: Captain role is required
+ * /api/captains/{captainId}:
+ *   get:
+ *     summary: Get a tenant Captain by captainId
+ *     description: Enter the captain ID returned by GET /api/captains. This identifier is also the linked StaffUser ID.
  *     tags: [Captains]
  *     security:
  *       - bearerAuth: []
  *     parameters:
  *       - in: path
- *         name: id
+ *         name: captainId
  *         required: true
  *         schema:
  *           type: integer
@@ -103,13 +160,14 @@ const router = Router();
  *       200:
  *         description: Captain fetched successfully
  *   put:
- *     summary: Update Captain profile and branch assignments
+ *     summary: Update Captain profile and branch assignments by captainId
+ *     description: Enter the captain ID returned by GET /api/captains.
  *     tags: [Captains]
  *     security:
  *       - bearerAuth: []
  *     parameters:
  *       - in: path
- *         name: id
+ *         name: captainId
  *         required: true
  *         schema:
  *           type: integer
@@ -162,7 +220,7 @@ router.get("/available", requireAdminAuth, getAvailableCaptains);
 router.get("/me", requireCaptainAuth, getMyCaptain);
 router.get("/availability", requireCaptainAuth, getCaptainAvailability);
 router.put("/availability", requireCaptainAuth, validate(captainAvailabilitySchema), updateCaptainAvailability);
-router.get("/:id", requireAdminAuth, validate(captainIdSchema), getCaptainById);
-router.put("/:id", requireAdminAuth, validate(updateCaptainSchema), updateCaptain);
+router.get("/:captainId", requireAdminAuth, validate(captainIdSchema), getCaptainById);
+router.put("/:captainId", requireAdminAuth, validate(updateCaptainSchema), updateCaptain);
 
 export default router;

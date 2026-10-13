@@ -21,13 +21,49 @@ const deliveryDetails = {
       deliveryLatitude: true,
       deliveryLongitude: true,
       deliveryPhone: true,
+      notes: true,
+      paymentStatus: true,
+      subtotal: true,
+      discountAmount: true,
+      packagingCharge: true,
+      deliveryCharge: true,
+      cgstAmount: true,
+      sgstAmount: true,
+      igstAmount: true,
+      totalAmount: true,
+      payment: { select: { paymentMethod: true, paymentStatus: true } },
       customer: { select: { fullName: true, phone: true } },
+      orderItems: {
+        select: {
+          id: true,
+          productNameSnapshot: true,
+          variantNameSnapshot: true,
+          quantity: true,
+          unitPrice: true,
+          lineTotal: true,
+        },
+      },
     },
   },
   captain: {
     select: {
       id: true,
       staffUser: { select: { fullName: true, phone: true, isActive: true } },
+    },
+  },
+} as const;
+
+const adminDeliveryDetails = {
+  ...deliveryDetails,
+  offers: {
+    orderBy: { offeredAt: "desc" as const },
+    select: {
+      id: true,
+      captainId: true,
+      status: true,
+      offeredAt: true,
+      respondedAt: true,
+      captain: { select: { staffUser: { select: { fullName: true } } } },
     },
   },
 } as const;
@@ -39,8 +75,11 @@ const getCurrentLocation = async (captainId: number, tenantId: string, after?: D
     select: { latitude: true, longitude: true, recordedAt: true },
   });
 
-const toDeliveryResponse = async (delivery: any) => ({
+const toDeliveryResponse = async (delivery: any, includeAssignmentHistory = false) => ({
   id: delivery.id,
+  deliveryId: delivery.id,
+  orderId: delivery.order.id,
+  captainId: delivery.captainId,
   order: {
     id: delivery.order.id,
     orderNumber: delivery.order.orderNumber,
@@ -52,6 +91,38 @@ const toDeliveryResponse = async (delivery: any) => ({
     deliveryLatitude: delivery.order.deliveryLatitude?.toString() ?? null,
     deliveryLongitude: delivery.order.deliveryLongitude?.toString() ?? null,
     deliveryPhone: delivery.order.deliveryPhone,
+    instructions: delivery.order.notes,
+    paymentStatus: delivery.order.paymentStatus,
+    payment: {
+      method: delivery.order.payment?.paymentMethod ?? null,
+      status: delivery.order.payment?.paymentStatus ?? delivery.order.paymentStatus,
+    },
+    itemCount: delivery.order.orderItems.reduce((count: number, item: { quantity: number }) => count + item.quantity, 0),
+    totals: {
+      subtotal: Number(delivery.order.subtotal),
+      discountAmount: Number(delivery.order.discountAmount),
+      packagingCharge: Number(delivery.order.packagingCharge),
+      deliveryCharge: Number(delivery.order.deliveryCharge),
+      cgstAmount: Number(delivery.order.cgstAmount),
+      sgstAmount: Number(delivery.order.sgstAmount),
+      igstAmount: Number(delivery.order.igstAmount),
+      totalAmount: Number(delivery.order.totalAmount),
+    },
+    items: delivery.order.orderItems.map((item: {
+      id: number;
+      productNameSnapshot: string;
+      variantNameSnapshot: string | null;
+      quantity: number;
+      unitPrice: { toString(): string };
+      lineTotal: { toString(): string };
+    }) => ({
+      id: item.id,
+      productName: item.productNameSnapshot,
+      variantName: item.variantNameSnapshot,
+      quantity: item.quantity,
+      unitPrice: Number(item.unitPrice),
+      lineTotal: Number(item.lineTotal),
+    })),
   },
   captain: delivery.captain
     ? { id: delivery.captain.id, fullName: delivery.captain.staffUser.fullName }
@@ -63,6 +134,23 @@ const toDeliveryResponse = async (delivery: any) => ({
   outForDeliveryAt: delivery.outForDeliveryAt,
   arrivedAt: delivery.arrivedAt,
   deliveredAt: delivery.deliveredAt,
+  ...(includeAssignmentHistory ? {
+    assignmentHistory: delivery.offers.map((offer: {
+      id: number;
+      captainId: number;
+      status: string;
+      offeredAt: Date;
+      respondedAt: Date | null;
+      captain: { staffUser: { fullName: string } };
+    }) => ({
+      id: offer.id,
+      captainId: offer.captainId,
+      captainName: offer.captain.staffUser.fullName,
+      status: offer.status,
+      offeredAt: offer.offeredAt,
+      respondedAt: offer.respondedAt,
+    })),
+  } : {}),
   currentLocation: delivery.captainId && delivery.status !== "DELIVERED"
     ? await getCurrentLocation(delivery.captainId, delivery.tenantId, delivery.outForDeliveryAt)
     : null,
@@ -103,27 +191,29 @@ export const assignDelivery = async (id: number, tenantId: string, captainId: nu
     include: { captainBranchAssignments: { select: { branchId: true } } },
   });
   if (!captain) throw new HttpError("Active Captain not found", 404, "CAPTAIN_NOT_FOUND");
+  const priorOffer = await prisma.deliveryOffer.findUnique({
+    where: { deliveryId_captainId: { deliveryId: id, captainId } },
+    select: { status: true },
+  });
+  if (priorOffer?.status === "REJECTED") {
+    throw new HttpError("This Captain has already rejected the delivery", 409, "CAPTAIN_PREVIOUSLY_REJECTED");
+  }
   if (captain.captainBranchAssignments.length && !captain.captainBranchAssignments.some((assignment) => assignment.branchId === delivery.order.branchId)) {
     throw new HttpError("Captain is not assigned to this branch", 403, "CAPTAIN_BRANCH_ACCESS_DENIED");
   }
 
-  const activeDelivery = await prisma.delivery.findFirst({
-    where: {
-      captainId,
-      tenantId,
-      id: { not: id },
-      status: { notIn: terminalDeliveryStatuses },
-    },
-    select: { id: true },
-  });
-  if (activeDelivery) throw new HttpError("Captain already has an active delivery", 409, "CAPTAIN_BUSY");
-
   const assigned = await prisma.$transaction(async (tx) => {
+    const assignedAt = new Date();
     const result = await tx.delivery.updateMany({
       where: { id, tenantId, status: "PENDING", captainId: null },
-      data: { captainId, status: "ASSIGNED", assignedAt: new Date() },
+      data: { captainId, status: "ASSIGNED", assignedAt },
     });
     if (result.count === 1) {
+      await tx.deliveryOffer.upsert({
+        where: { deliveryId_captainId: { deliveryId: id, captainId } },
+        update: { tenantId, status: "OFFERED", offeredAt: assignedAt, respondedAt: null },
+        create: { deliveryId: id, captainId, tenantId, status: "OFFERED", offeredAt: assignedAt },
+      });
       await tx.captain.update({ where: { id: captainId }, data: { currentStatus: "BUSY" } });
     }
     return result;
@@ -145,22 +235,84 @@ export const getMyDeliveries = async (tenantId: string, captainId: number) => {
 export const getCaptainDelivery = async (id: number, tenantId: string, captainId: number) =>
   toDeliveryResponse(await findAssignedDelivery(id, tenantId, captainId));
 
-export const getAdminDeliveries = async (tenantId: string) => {
+export const getAdminDeliveries = async (tenantId: string, captainId?: number) => {
   const deliveries = await prisma.delivery.findMany({
-    where: { tenantId },
+    where: { tenantId, ...(captainId === undefined ? {} : { captainId }) },
     orderBy: { id: "desc" },
-    include: deliveryDetails,
+    include: adminDeliveryDetails,
   });
-  return Promise.all(deliveries.map((delivery) => toDeliveryResponse(delivery)));
+  return Promise.all(deliveries.map((delivery) => toDeliveryResponse(delivery, true)));
 };
 
-export const getAdminDelivery = async (id: number, tenantId: string) =>
-  toDeliveryResponse(await findDelivery(id, tenantId));
+export const getAdminDelivery = async (id: number, tenantId: string) => {
+  const delivery = await prisma.delivery.findFirst({
+    where: { id, tenantId },
+    include: adminDeliveryDetails,
+  });
+  if (!delivery || delivery.order.tenantId !== tenantId) {
+    throw new HttpError("Delivery not found", 404, "DELIVERY_NOT_FOUND");
+  }
+  return toDeliveryResponse(delivery, true);
+};
+
+export const rejectDelivery = async (id: number, tenantId: string, captainId: number) => {
+  const delivery = await findAssignedDelivery(id, tenantId, captainId);
+  if (delivery.status !== "ASSIGNED") {
+    throw new HttpError("Only an assigned, unaccepted delivery can be rejected", 409, "DELIVERY_REJECTION_NOT_ALLOWED");
+  }
+
+  const respondedAt = new Date();
+  await prisma.$transaction(async (tx) => {
+    const result = await tx.delivery.updateMany({
+      where: { id, tenantId, captainId, status: "ASSIGNED" },
+      data: { status: "PENDING", captainId: null, assignedAt: null },
+    });
+    if (result.count !== 1) throw new HttpError("Delivery state changed; reload and retry", 409, "DELIVERY_STATE_CHANGED");
+    await tx.deliveryOffer.upsert({
+      where: { deliveryId_captainId: { deliveryId: id, captainId } },
+      update: { tenantId, status: "REJECTED", respondedAt },
+      create: {
+        deliveryId: id,
+        captainId,
+        tenantId,
+        status: "REJECTED",
+        offeredAt: delivery.assignedAt ?? respondedAt,
+        respondedAt,
+      },
+    });
+    const otherActiveDelivery = await tx.delivery.findFirst({
+      where: { tenantId, captainId, status: { notIn: terminalDeliveryStatuses } },
+      select: { id: true },
+    });
+    if (!otherActiveDelivery) {
+      await tx.captain.update({ where: { id: captainId }, data: { currentStatus: "AVAILABLE" } });
+    }
+  });
+  emitDeliveryStatus(tenantId, delivery.order.id, delivery.order.customerId, {
+    deliveryId: id,
+    status: "PENDING",
+    timestamp: respondedAt,
+  });
+  return toDeliveryResponse(await findDelivery(id, tenantId));
+};
 
 export const getMyUpcomingDeliveries = async (tenantId: string, captainId: number) => {
   const deliveries = await prisma.delivery.findMany({
     where: { tenantId, captainId, status: "ASSIGNED" },
     orderBy: { assignedAt: "desc" },
+    include: deliveryDetails,
+  });
+  return Promise.all(deliveries.map((delivery) => toDeliveryResponse(delivery)));
+};
+
+export const getMyCurrentDeliveries = async (tenantId: string, captainId: number) => {
+  const deliveries = await prisma.delivery.findMany({
+    where: {
+      tenantId,
+      captainId,
+      status: { in: ["ACCEPTED", "PICKED_UP", "OUT_FOR_DELIVERY", "ARRIVED"] },
+    },
+    orderBy: [{ acceptedAt: "desc" }, { id: "desc" }],
     include: deliveryDetails,
   });
   return Promise.all(deliveries.map((delivery) => toDeliveryResponse(delivery)));
@@ -244,11 +396,34 @@ const updateCaptainDelivery = async (
       });
     });
   } else {
-    const result = await prisma.delivery.updateMany({
-      where: { id, tenantId, captainId, status: from },
-      data: { status: to, [timestampField]: new Date() },
-    });
-    if (result.count !== 1) throw new HttpError("Delivery state changed; reload and retry", 409, "DELIVERY_STATE_CHANGED");
+    const transitionedAt = new Date();
+    if (to === "ACCEPTED") {
+      await prisma.$transaction(async (tx) => {
+        const result = await tx.delivery.updateMany({
+          where: { id, tenantId, captainId, status: from },
+          data: { status: to, [timestampField]: transitionedAt },
+        });
+        if (result.count !== 1) throw new HttpError("Delivery state changed; reload and retry", 409, "DELIVERY_STATE_CHANGED");
+        await tx.deliveryOffer.upsert({
+          where: { deliveryId_captainId: { deliveryId: id, captainId } },
+          update: { tenantId, status: "ACCEPTED", respondedAt: transitionedAt },
+          create: {
+            deliveryId: id,
+            captainId,
+            tenantId,
+            status: "ACCEPTED",
+            offeredAt: delivery.assignedAt ?? transitionedAt,
+            respondedAt: transitionedAt,
+          },
+        });
+      });
+    } else {
+      const result = await prisma.delivery.updateMany({
+        where: { id, tenantId, captainId, status: from },
+        data: { status: to, [timestampField]: transitionedAt },
+      });
+      if (result.count !== 1) throw new HttpError("Delivery state changed; reload and retry", 409, "DELIVERY_STATE_CHANGED");
+    }
   }
 
   emitDeliveryStatus(tenantId, delivery.order.id, delivery.order.customerId, {
@@ -331,7 +506,14 @@ export const completeDelivery = async (id: number, tenantId: string, captainId: 
         note: "Delivery completed with customer OTP",
       },
     });
-    await tx.captain.update({ where: { id: captainId }, data: { currentStatus: "AVAILABLE" } });
+    const otherActiveDelivery = await tx.delivery.findFirst({
+      where: { tenantId, captainId, id: { not: id }, status: { notIn: terminalDeliveryStatuses } },
+      select: { id: true },
+    });
+    await tx.captain.update({
+      where: { id: captainId },
+      data: { currentStatus: otherActiveDelivery ? "BUSY" : "AVAILABLE" },
+    });
   });
   await awardLoyaltyForCompletedOrder(tenantId, delivery.order.id);
   emitDeliveryStatus(tenantId, delivery.order.id, delivery.order.customerId, {

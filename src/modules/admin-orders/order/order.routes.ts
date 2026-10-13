@@ -31,7 +31,7 @@ const router = Router();
  * /api/admin/orders/{orderId}/assign-captain:
  *   post:
  *     summary: Assign a Captain to an order
- *     description: Assigns an active, tenant-scoped Captain to the existing delivery for a READY delivery order.
+ *     description: orderId is the customer Order ID from the admin order list or customer order response. captainId is the Captain Management ID from GET /api/captains. The Captain profile ID is shared with its linked StaffUser.id; it is not the orderId or deliveryId.
  *     tags:
  *       - Admin Orders
  *     security:
@@ -40,11 +40,14 @@ const router = Router();
  *       - in: path
  *         name: orderId
  *         required: true
+ *         description: Customer Order record ID, not a Delivery record ID.
  *         schema:
  *           type: integer
- *         example: 101
+ *           minimum: 1
+ *           example: 188
  *     requestBody:
  *       required: true
+ *       description: Captain Management ID selected from GET /api/captains.
  *       content:
  *         application/json:
  *           schema:
@@ -54,8 +57,8 @@ const router = Router();
  *             properties:
  *               captainId:
  *                 type: integer
- *                 description: Captain profile ID, not a separate StaffUser identifier.
- *                 example: 12
+ *                 description: Captain profile ID returned as id by GET /api/captains; it shares its primary key with the linked StaffUser.
+ *                 example: 303
  *     responses:
  *       200:
  *         description: Captain assigned; returns the updated order and delivery assignment details.
@@ -77,7 +80,7 @@ const router = Router();
  *                   properties:
  *                     id:
  *                       type: integer
- *                       example: 101
+ *                       example: 188
  *                     orderNumber:
  *                       type: string
  *                       example: ORD-20261013-001
@@ -90,21 +93,21 @@ const router = Router();
  *                       properties:
  *                         id:
  *                           type: integer
- *                           example: 55
+ *                           example: 130
  *                         status:
  *                           type: string
  *                           example: ASSIGNED
  *                         captainId:
  *                           type: integer
  *                           nullable: true
- *                           example: 12
+ *                           example: 303
  *                         captain:
  *                           type: object
  *                           nullable: true
  *                           properties:
  *                             id:
  *                               type: integer
- *                               example: 12
+ *                               example: 303
  *                             name:
  *                               type: string
  *                               example: Alex Rider

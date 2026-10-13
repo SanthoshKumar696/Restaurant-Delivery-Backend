@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from "express";
 import { HttpError } from "../../common/errors/http-error";
 import { smsService } from "../../integrations/sms";
 import { prisma } from "../../database/prisma";
+import { adminDeliveriesSchema } from "./delivery.validation";
 import {
   acceptDelivery as acceptDeliveryService,
   arriveDelivery as arriveDeliveryService,
@@ -12,10 +13,12 @@ import {
   getCaptainDelivery as getCaptainDeliveryService,
   getCustomerDelivery as getCustomerDeliveryService,
   getMyCompletedDeliveries as getMyCompletedDeliveriesService,
+  getMyCurrentDeliveries as getMyCurrentDeliveriesService,
   getMyDashboard as getMyDashboardService,
   getMyDeliveries as getMyDeliveriesService,
   getMyUpcomingDeliveries as getMyUpcomingDeliveriesService,
   pickUpDelivery as pickUpDeliveryService,
+  rejectDelivery as rejectDeliveryService,
   startDelivery as startDeliveryService,
   updateDeliveryLocation as updateDeliveryLocationService,
 } from "./delivery.service";
@@ -26,13 +29,18 @@ const handle = (action: (req: Request, res: Response) => Promise<unknown>) =>
   };
 
 export const assignDelivery = handle(async (req, res) => {
-  const data = await assignDeliveryService(Number(req.params.id), req.admin!.tenantId, req.body.captainId);
+  const data = await assignDeliveryService(Number(req.params.deliveryId), req.admin!.tenantId, req.body.captainId);
   return res.status(200).json({ success: true, message: "Captain assigned successfully", data });
 });
 
 export const getMyDeliveries = handle(async (req, res) => {
   const data = await getMyDeliveriesService(req.staff!.tenantId, req.staff!.staffId);
   return res.status(200).json({ success: true, message: "Assigned deliveries fetched successfully", items: data });
+});
+
+export const getMyCurrentDeliveries = handle(async (req, res) => {
+  const data = await getMyCurrentDeliveriesService(req.staff!.tenantId, req.staff!.staffId);
+  return res.status(200).json({ success: true, message: "Current deliveries fetched successfully", items: data });
 });
 
 export const getMyDashboard = handle(async (req, res) => {
@@ -51,33 +59,38 @@ export const getMyCompletedDeliveries = handle(async (req, res) => {
 });
 
 export const getCaptainDelivery = handle(async (req, res) => {
-  const data = await getCaptainDeliveryService(Number(req.params.id), req.staff!.tenantId, req.staff!.staffId);
+  const data = await getCaptainDeliveryService(Number(req.params.deliveryId), req.staff!.tenantId, req.staff!.staffId);
   return res.status(200).json({ success: true, message: "Delivery fetched successfully", data });
 });
 
 export const acceptDelivery = handle(async (req, res) => {
-  const data = await acceptDeliveryService(Number(req.params.id), req.staff!.tenantId, req.staff!.staffId);
+  const data = await acceptDeliveryService(Number(req.params.deliveryId), req.staff!.tenantId, req.staff!.staffId);
   return res.status(200).json({ success: true, message: "Delivery accepted", data });
 });
 
+export const rejectDelivery = handle(async (req, res) => {
+  const data = await rejectDeliveryService(Number(req.params.deliveryId), req.staff!.tenantId, req.staff!.staffId);
+  return res.status(200).json({ success: true, message: "Delivery rejected and returned to the unassigned queue", data });
+});
+
 export const pickUpDelivery = handle(async (req, res) => {
-  const data = await pickUpDeliveryService(Number(req.params.id), req.staff!.tenantId, req.staff!.staffId);
+  const data = await pickUpDeliveryService(Number(req.params.deliveryId), req.staff!.tenantId, req.staff!.staffId);
   return res.status(200).json({ success: true, message: "Pickup confirmed", data });
 });
 
 export const startDelivery = handle(async (req, res) => {
-  const data = await startDeliveryService(Number(req.params.id), req.staff!.tenantId, req.staff!.staffId);
+  const data = await startDeliveryService(Number(req.params.deliveryId), req.staff!.tenantId, req.staff!.staffId);
   return res.status(200).json({ success: true, message: "Delivery started", data });
 });
 
 export const arriveDelivery = handle(async (req, res) => {
-  const data = await arriveDeliveryService(Number(req.params.id), req.staff!.tenantId, req.staff!.staffId);
+  const data = await arriveDeliveryService(Number(req.params.deliveryId), req.staff!.tenantId, req.staff!.staffId);
   return res.status(200).json({ success: true, message: "Captain marked arrived", data });
 });
 
 export const updateDeliveryLocation = handle(async (req, res) => {
   const data = await updateDeliveryLocationService(
-    Number(req.params.id),
+    Number(req.params.deliveryId),
     req.staff!.tenantId,
     req.staff!.staffId,
     req.body.latitude,
@@ -87,17 +100,18 @@ export const updateDeliveryLocation = handle(async (req, res) => {
 });
 
 export const completeDelivery = handle(async (req, res) => {
-  const data = await completeDeliveryService(Number(req.params.id), req.staff!.tenantId, req.staff!.staffId, req.body.otp);
+  const data = await completeDeliveryService(Number(req.params.deliveryId), req.staff!.tenantId, req.staff!.staffId, req.body.otp);
   return res.status(200).json({ success: true, message: "Delivery completed", data });
 });
 
 export const getAdminDeliveries = handle(async (req, res) => {
-  const data = await getAdminDeliveriesService(req.admin!.tenantId);
+  const captainId = req.query.captainId === undefined ? undefined : Number(req.query.captainId);
+  const data = await getAdminDeliveriesService(req.admin!.tenantId, captainId);
   return res.status(200).json({ success: true, message: "Deliveries fetched successfully", items: data });
 });
 
 export const getAdminDelivery = handle(async (req, res) => {
-  const data = await getAdminDeliveryService(Number(req.params.id), req.admin!.tenantId);
+  const data = await getAdminDeliveryService(Number(req.params.deliveryId), req.admin!.tenantId);
   return res.status(200).json({ success: true, message: "Delivery fetched successfully", data });
 });
 
@@ -105,7 +119,7 @@ export const getCustomerDelivery = handle(async (req, res) => {
   if (Number(req.params.customerId) !== req.customer!.customerId) {
     throw new HttpError("Delivery not found", 404, "DELIVERY_NOT_FOUND");
   }
-  const data = await getCustomerDeliveryService(Number(req.params.id), req.customer!.customerId, req.customer!.tenantId);
+  const data = await getCustomerDeliveryService(Number(req.params.orderId), req.customer!.customerId, req.customer!.tenantId);
   return res.status(200).json({ success: true, message: "Delivery tracking fetched successfully", data });
 });
 
@@ -115,7 +129,7 @@ export const sendDeliveryOtp = handle(async (req, res) => {
   }
   const order = await prisma.order.findFirst({
     where: {
-      id: Number(req.params.id),
+      id: Number(req.params.orderId),
       customerId: req.customer!.customerId,
       tenantId: req.customer!.tenantId,
       fulfillmentType: "DELIVERY",
@@ -124,8 +138,7 @@ export const sendDeliveryOtp = handle(async (req, res) => {
     select: { deliveryPhone: true, customer: { select: { phone: true } } },
   });
   if (!order) throw new HttpError("Order not found or not arrived", 404, "ORDER_NOT_FOUND");
-  const result = await smsService.sendOtp(order.deliveryPhone ?? order.customer.phone, req.customer!.tenantId, "DELIVERY", String(Number(req.params.id)));
+  const result = await smsService.sendOtp(order.deliveryPhone ?? order.customer.phone, req.customer!.tenantId, "DELIVERY", String(Number(req.params.orderId)));
   if (!result.success) throw new HttpError(result.message, 400, result.code ?? "OTP_SEND_FAILED");
   return res.status(200).json({ success: true, message: "Delivery verification code sent" });
 });
-
