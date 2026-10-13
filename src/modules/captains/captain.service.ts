@@ -5,7 +5,7 @@ import { prisma } from "../../database/prisma";
 type CreateCaptainInput = {
   fullName: string;
   phone: string;
-  email?: string;
+  email: string;
   password: string;
   isActive?: boolean;
   vehicleType?: string | null;
@@ -13,7 +13,32 @@ type CreateCaptainInput = {
   branchIds?: string[];
 };
 
-type UpdateCaptainInput = Partial<Omit<CreateCaptainInput, "password">>;
+type UpdateCaptainInput = Partial<Omit<CreateCaptainInput, "password" | "email">> & {
+  email?: string | null;
+  password?: string;
+};
+
+const ensureUniqueStaffIdentity = async (tenantId: string, phone?: string, email?: string | null, excludeId?: number) => {
+  if (phone) {
+    const existingByPhone = await prisma.staffUser.findUnique({
+      where: { tenantId_phone: { tenantId, phone } },
+      select: { id: true },
+    });
+    if (existingByPhone && existingByPhone.id !== excludeId) {
+      throw new HttpError("Staff user with this phone number already exists for this tenant", 409, "STAFF_PHONE_CONFLICT");
+    }
+  }
+
+  if (email) {
+    const existingByEmail = await prisma.staffUser.findFirst({
+      where: { tenantId, email, id: { not: excludeId ?? undefined } },
+      select: { id: true },
+    });
+    if (existingByEmail) {
+      throw new HttpError("Staff user with this email already exists for this tenant", 409, "STAFF_EMAIL_CONFLICT");
+    }
+  }
+};
 
 const validateBranches = async (tenantId: string, branchIds: string[] = []) => {
   const uniqueBranchIds = [...new Set(branchIds)];
@@ -74,11 +99,8 @@ export const createCaptain = async (
   data: CreateCaptainInput
 ) => {
   const branchIds = await validateBranches(tenantId, data.branchIds);
-  const existing = await prisma.staffUser.findUnique({
-    where: { tenantId_phone: { tenantId, phone: data.phone } },
-    select: { id: true },
-  });
-  if (existing) throw new HttpError("Staff user with this phone number already exists for this tenant", 409, "STAFF_PHONE_CONFLICT");
+
+  await ensureUniqueStaffIdentity(tenantId, data.phone, data.email);
 
   const passwordHash = await bcrypt.hash(data.password, 12);
   const captain = await prisma.$transaction(async (tx) => {
@@ -182,7 +204,7 @@ export const updateCaptain = async (
 ) => {
   const existing = await prisma.captain.findFirst({
     where: { id, tenantId, staffUser: { role: "CAPTAIN" } },
-    select: { id: true, staffUser: { select: { phone: true } } },
+    select: { id: true, staffUser: { select: { phone: true, email: true } } },
   });
   if (!existing) throw new HttpError("Captain not found", 404, "CAPTAIN_NOT_FOUND");
 
@@ -196,14 +218,15 @@ export const updateCaptain = async (
     }
   }
 
+  const nextPhone = data.phone ?? existing.staffUser.phone;
+  const nextEmail = data.email ?? existing.staffUser.email;
+
   if (data.phone && data.phone !== existing.staffUser.phone) {
-    const duplicate = await prisma.staffUser.findUnique({
-      where: { tenantId_phone: { tenantId, phone: data.phone } },
-      select: { id: true },
-    });
-    if (duplicate && duplicate.id !== id) {
-      throw new HttpError("Staff user with this phone number already exists for this tenant", 409, "STAFF_PHONE_CONFLICT");
-    }
+    await ensureUniqueStaffIdentity(tenantId, data.phone, nextEmail, id);
+  }
+
+  if (data.email && data.email !== existing.staffUser.email) {
+    await ensureUniqueStaffIdentity(tenantId, nextPhone, data.email, id);
   }
 
   const branchIds = data.branchIds === undefined
@@ -211,11 +234,15 @@ export const updateCaptain = async (
     : await validateBranches(tenantId, data.branchIds);
 
   const captain = await prisma.$transaction(async (tx) => {
-    const { vehicleType, vehicleNumber, branchIds: _branchIds, ...staffData } = data;
-    if (Object.keys(staffData).length) {
+    const { vehicleType, vehicleNumber, branchIds: _branchIds, password, ...staffData } = data;
+    const staffUpdateData: Record<string, unknown> = { ...staffData };
+    if (password !== undefined) {
+      staffUpdateData.passwordHash = await bcrypt.hash(password, 12);
+    }
+    if (Object.keys(staffUpdateData).length) {
       await tx.staffUser.update({
         where: { id, tenantId },
-        data: staffData,
+        data: staffUpdateData,
       });
     }
     if (vehicleType !== undefined || vehicleNumber !== undefined) {

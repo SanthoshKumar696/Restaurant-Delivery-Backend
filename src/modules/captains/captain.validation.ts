@@ -3,7 +3,7 @@ import { z } from "zod";
 const captainFields = {
   fullName: z.string().trim().min(2).max(150),
   phone: z.string().trim().min(10).max(20),
-  email: z.string().trim().email().max(150).optional(),
+  email: z.string().trim().email().max(150),
   isActive: z.boolean().optional(),
   vehicleType: z.string().trim().max(50).nullable().optional(),
   vehicleNumber: z.string().trim().max(20).nullable().optional(),
@@ -23,6 +23,7 @@ export const updateCaptainSchema = z.object({
     fullName: captainFields.fullName.optional(),
     phone: captainFields.phone.optional(),
     email: captainFields.email.nullable().optional(),
+    password: z.string().min(8).max(100).optional(),
     isActive: captainFields.isActive,
     vehicleType: captainFields.vehicleType,
     vehicleNumber: captainFields.vehicleNumber,
