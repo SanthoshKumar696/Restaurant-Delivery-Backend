@@ -12,6 +12,7 @@ import {
   acceptAdminOrder as acceptAdminOrderService,
   rejectAdminOrder as rejectAdminOrderService,
   cancelAdminOrder as cancelAdminOrderService,
+  assignCaptainToAdminOrder as assignCaptainToAdminOrderService,
 } from "./order.service";
 import { OrderStatus, PaymentStatus } from "@prisma/client";
 
@@ -33,6 +34,28 @@ const PAYMENT_STATUSES: PaymentStatus[] = [
   "REFUNDED",
   "PARTIALLY_REFUNDED",
 ];
+
+export const assignCaptainToAdminOrder = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const order = await assignCaptainToAdminOrderService(
+      Number(req.params.orderId),
+      req.admin!.tenantId,
+      req.body.captainId
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Captain assigned successfully",
+      data: order,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 
 // -----------------------------------
 // GET ALL ADMIN ORDERS

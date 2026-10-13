@@ -8,6 +8,48 @@ import {
   AdminOrderStatusUpdateInput,
 } from "./order.types";
 import { OrderStatus } from "@prisma/client";
+import { assignDelivery } from "../../deliveries/delivery.service";
+
+const adminOrderDeliverySelect = {
+  id: true,
+  status: true,
+  captainId: true,
+  assignedAt: true,
+  captain: {
+    select: {
+      id: true,
+      staffUser: {
+        select: {
+          fullName: true,
+          email: true,
+          phone: true,
+        },
+      },
+    },
+  },
+} as const;
+
+const toAdminOrderDelivery = (delivery: {
+  id: number;
+  status: import("@prisma/client").DeliveryStatus;
+  captainId: number | null;
+  assignedAt: Date | null;
+  captain: {
+    id: number;
+    staffUser: { fullName: string; email: string | null; phone: string };
+  } | null;
+} | null) => delivery ? ({
+  id: delivery.id,
+  status: delivery.status,
+  captainId: delivery.captainId,
+  captain: delivery.captain ? {
+    id: delivery.captain.id,
+    name: delivery.captain.staffUser.fullName,
+    email: delivery.captain.staffUser.email,
+    phone: delivery.captain.staffUser.phone,
+  } : null,
+  assignedAt: delivery.assignedAt,
+}) : null;
 
 // -----------------------------------
 // GET ALL ADMIN ORDERS
@@ -78,6 +120,9 @@ export const getAdminOrders = async (
           phone: true,
         },
       },
+      delivery: {
+        select: adminOrderDeliverySelect,
+      },
     },
   });
 
@@ -92,6 +137,7 @@ export const getAdminOrders = async (
     paymentStatus: order.paymentStatus,
     totalAmount: Number(order.totalAmount),
     placedAt: order.placedAt,
+    delivery: toAdminOrderDelivery(order.delivery),
   }));
 };
 
@@ -128,6 +174,9 @@ export const getOrdersByStatus = async (
           phone: true,
         },
       },
+      delivery: {
+        select: adminOrderDeliverySelect,
+      },
     },
   });
 
@@ -142,6 +191,7 @@ export const getOrdersByStatus = async (
     paymentStatus: order.paymentStatus,
     totalAmount: Number(order.totalAmount),
     placedAt: order.placedAt,
+    delivery: toAdminOrderDelivery(order.delivery),
   }));
 };
 
@@ -229,6 +279,9 @@ export const getAdminOrderById = async (
           },
         },
       },
+      delivery: {
+        select: adminOrderDeliverySelect,
+      },
     },
   });
 
@@ -289,7 +342,40 @@ export const getAdminOrderById = async (
       changedAt: h.changedAt,
       changedBy: h.staffUser?.fullName ?? null,
     })),
+    delivery: toAdminOrderDelivery(order.delivery),
   };
+};
+
+export const assignCaptainToAdminOrder = async (
+  orderId: number,
+  tenantId: string,
+  captainId: number
+): Promise<AdminOrderDetailResponse> => {
+  const order = await prisma.order.findFirst({
+    where: { id: orderId, tenantId },
+    select: {
+      id: true,
+      status: true,
+      fulfillmentType: true,
+      delivery: { select: { id: true } },
+    },
+  });
+
+  if (!order) {
+    throw new HttpError("Order not found", 404, "ORDER_NOT_FOUND");
+  }
+  if (order.fulfillmentType !== "DELIVERY") {
+    throw new HttpError("Pickup orders cannot be assigned to a Captain", 409, "PICKUP_NOT_ASSIGNABLE");
+  }
+  if (order.status !== "READY") {
+    throw new HttpError("Captain can only be assigned when the order is ready", 409, "ORDER_NOT_READY");
+  }
+  if (!order.delivery) {
+    throw new HttpError("Delivery record not found for order", 409, "DELIVERY_RECORD_NOT_FOUND");
+  }
+
+  await assignDelivery(order.delivery.id, tenantId, captainId);
+  return getAdminOrderById(order.id, tenantId);
 };
 
 // -----------------------------------

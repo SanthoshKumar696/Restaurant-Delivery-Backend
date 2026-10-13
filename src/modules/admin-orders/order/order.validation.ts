@@ -58,6 +58,15 @@ export const getAdminOrderByIdSchema = z.object({
   }),
 });
 
+export const assignCaptainToAdminOrderSchema = z.object({
+  params: z.object({
+    orderId: z.string().regex(/^\d+$/, "Invalid order ID"),
+  }),
+  body: z.object({
+    captainId: z.number().int().positive("Captain ID must be a positive integer"),
+  }),
+});
+
 export const adminOrderStatusUpdateSchema = z.object({
   params: z.object({
     id: z

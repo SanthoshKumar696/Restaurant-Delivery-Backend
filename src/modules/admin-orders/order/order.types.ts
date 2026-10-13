@@ -17,6 +17,20 @@ export type AdminOrderListItem = {
   paymentStatus: PaymentStatus;
   totalAmount: number;
   placedAt: Date;
+  delivery: AdminOrderDeliveryInfo | null;
+};
+
+export type AdminOrderDeliveryInfo = {
+  id: number;
+  status: import("@prisma/client").DeliveryStatus;
+  captainId: number | null;
+  captain: {
+    id: number;
+    name: string;
+    email: string | null;
+    phone: string;
+  } | null;
+  assignedAt: Date | null;
 };
 
 export type AdminOrderItemResponse = {
@@ -78,6 +92,7 @@ export type AdminOrderDetailResponse = {
   customer: AdminOrderCustomerInfo;
   orderItems: AdminOrderItemResponse[];
   statusHistory: AdminOrderStatusHistoryItem[];
+  delivery: AdminOrderDeliveryInfo | null;
 };
 
 export type AdminOrderStatusUpdateInput = {

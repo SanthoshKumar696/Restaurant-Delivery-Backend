@@ -50,7 +50,7 @@ const main = async () => {
 
   const server = createServer(app);
   initializeDeliverySocket(server);
-  server.listen(0);
+  server.listen(Number(process.env.PORT) || 0, "127.0.0.1");
   await new Promise<void>((resolve) => server.once("listening", resolve));
   const baseUrl = `http://127.0.0.1:${(server.address() as any).port}`;
   try {
@@ -82,38 +82,80 @@ const main = async () => {
     }));
     expectStatus(orderResult, 201, "manual delivery order");
     const orderId = orderResult.body.data.id as number;
+    expectStatus(await request(baseUrl, "/api/admin/orders/not-an-id/assign-captain", apiJson(adminToken, { captainId: 1 })), 400, "reject invalid order id");
     expectStatus(await request(baseUrl, `/api/admin/orders/${orderId}/accept`, apiJson(adminToken, { tenantId }, "PATCH")), 200, "accept order");
     expectStatus(await request(baseUrl, `/api/admin/orders/${orderId}/status`, apiJson(adminToken, { tenantId, status: "PREPARING" }, "PATCH")), 200, "preparing order");
     expectStatus(await request(baseUrl, `/api/admin/orders/${orderId}/status`, apiJson(adminToken, { tenantId, status: "READY" }, "PATCH")), 200, "ready order");
     const adminOrders = await request(baseUrl, `/api/admin/orders?tenantId=${tenantId}`, apiJson(adminToken));
     expectStatus(adminOrders, 200, "admin receives order");
-    assert.ok(JSON.stringify(adminOrders.body).includes(String(orderId)));
+    const listedOrder = adminOrders.body.data.find((order: any) => order.id === orderId);
+    assert.ok(listedOrder, "READY delivery order remains in the admin order list");
+    const orderDetails = await request(baseUrl, `/api/admin/orders/${orderId}?tenantId=${tenantId}`, apiJson(adminToken));
+    expectStatus(orderDetails, 200, "admin receives order details");
     const unassigned = await prisma.delivery.findUniqueOrThrow({ where: { orderId } });
     assert.equal(unassigned.status, "PENDING");
     assert.equal(unassigned.captainId, null);
+    assert.equal(listedOrder.delivery.id, unassigned.id);
+    assert.equal(listedOrder.delivery.status, "PENDING");
+    assert.equal(listedOrder.delivery.captainId, null);
+    assert.equal(orderDetails.body.data.delivery.id, unassigned.id);
+    assert.equal(orderDetails.body.data.delivery.captain, null);
     assert.equal(await prisma.deliveryOffer.count({ where: { deliveryId: unassigned.id } }), 0);
 
     const createStaff = async (name: string, emailSuffix: string, phoneSuffix: number) => {
       const phone = String(7300000000 + phoneSuffix);
-      const result = await request(baseUrl, "/api/staff", apiJson(adminToken, {
-        tenantId,
+      const result = await request(baseUrl, "/api/captains", apiJson(adminToken, {
         fullName: name,
         phone,
         email: `${emailSuffix}.${suffix}@manual.invalid`,
         password: "delivery@123",
-        role: "CAPTAIN",
         isActive: true,
+        branchIds: [branchId],
       }));
-      expectStatus(result, 201, `create ${name} after READY`);
-      assert.equal(result.body.data.tenantId, tenantId);
+      expectStatus(result, 201, `create ${name} Captain after READY`);
       assert.equal(result.body.data.role, "CAPTAIN");
       assert.equal(result.body.data.isActive, true);
+      assert.equal(result.body.data.id, result.body.data.staffId);
       assert.ok(!Object.prototype.hasOwnProperty.call(result.body.data, "passwordHash"));
       return { id: result.body.data.id as number, email: `${emailSuffix}.${suffix}@manual.invalid`, phone };
     };
     const dinesh = await createStaff("Dinesh", "dinesh", 11);
     const ramesh = await createStaff("Ramesh", "ramesh", 12);
     const suresh = await createStaff("Suresh", "suresh", 13);
+    const inactiveCaptain = await request(baseUrl, "/api/captains", apiJson(adminToken, {
+      fullName: "Inactive Captain",
+      phone: `74${suffix}`,
+      email: `inactive.${suffix}@manual.invalid`,
+      password: "delivery@123",
+      isActive: false,
+      branchIds: [branchId],
+    }));
+    expectStatus(inactiveCaptain, 201, "create inactive Captain");
+
+    const foreignTenantId = `FOR${suffix}`;
+    const foreignAdminUsername = `foreign_admin_${suffix}`;
+    await prisma.tenant.create({ data: { id: foreignTenantId, name: "Foreign Manual Tenant", slug: `${foreignTenantId.toLowerCase()}-manual` } });
+    await prisma.admin.create({ data: { tenantId: foreignTenantId, username: foreignAdminUsername, name: "Foreign Manual Admin", passwordHash: await bcrypt.hash("ManualAdmin@123", 12), isActive: true } });
+    const foreignAdminLogin = await request(baseUrl, "/api/auth/admin/login", apiJson(undefined, { username: foreignAdminUsername, password: "ManualAdmin@123" }));
+    expectStatus(foreignAdminLogin, 200, "foreign tenant admin login");
+    const foreignCaptain = await request(baseUrl, "/api/captains", apiJson(foreignAdminLogin.body.data.token, {
+      fullName: "Foreign Captain",
+      phone: `75${suffix}`,
+      email: `foreign.${suffix}@manual.invalid`,
+      password: "delivery@123",
+      isActive: true,
+    }));
+    expectStatus(foreignCaptain, 201, "create Captain in foreign tenant");
+
+    const captainList = await request(baseUrl, "/api/captains", apiJson(adminToken));
+    expectStatus(captainList, 200, "admin fetches tenant captains");
+    assert.ok(captainList.body.items.some((captain: any) => captain.id === dinesh.id));
+    assert.ok(!captainList.body.items.some((captain: any) => captain.id === foreignCaptain.body.data.id));
+    expectStatus(await request(baseUrl, `/api/admin/orders/${orderId}/assign-captain`, apiJson(undefined, { captainId: dinesh.id })), 401, "require admin authentication");
+    expectStatus(await request(baseUrl, `/api/admin/orders/${orderId}/assign-captain`, apiJson(adminToken, { captainId: dinesh.id, tenantId: foreignTenantId })), 403, "reject tenant spoofing");
+    expectStatus(await request(baseUrl, `/api/admin/orders/${orderId}/assign-captain`, apiJson(adminToken, { captainId: 999999999 })), 404, "reject invalid Captain ID");
+    expectStatus(await request(baseUrl, `/api/admin/orders/${orderId}/assign-captain`, apiJson(adminToken, { captainId: foreignCaptain.body.data.id })), 404, "reject foreign tenant Captain");
+    expectStatus(await request(baseUrl, `/api/admin/orders/${orderId}/assign-captain`, apiJson(adminToken, { captainId: inactiveCaptain.body.data.id })), 404, "reject inactive Captain");
 
     const loginByEmail = async (email: string) => {
       const result = await request(baseUrl, "/api/auth/staff/login", apiJson(undefined, { tenantId, email, password: "delivery@123" }));
@@ -135,13 +177,26 @@ const main = async () => {
     const assignmentSocket = io(baseUrl, { auth: { token: dineshToken }, transports: ["websocket"] });
     await new Promise<void>((resolve, reject) => { assignmentSocket.once("connect", resolve); assignmentSocket.once("connect_error", reject); });
     const assignmentEvent = new Promise<any>((resolve) => assignmentSocket.once("delivery:assigned", resolve));
-    expectStatus(await request(baseUrl, `/api/delivery/${unassigned.id}/assign`, apiJson(adminToken, { captainId: dinesh.id })), 200, "admin assigns Dinesh");
+    const adminAssignment = await request(baseUrl, `/api/admin/orders/${orderId}/assign-captain`, apiJson(adminToken, { captainId: dinesh.id }));
+    expectStatus(adminAssignment, 200, "admin assigns Dinesh through Admin Orders");
+    assert.equal(adminAssignment.body.data.delivery.id, unassigned.id);
+    assert.equal(adminAssignment.body.data.delivery.status, "ASSIGNED");
+    assert.equal(adminAssignment.body.data.delivery.captainId, dinesh.id);
+    assert.equal(adminAssignment.body.data.delivery.captain.name, "Dinesh");
+    assert.equal(adminAssignment.body.data.delivery.captain.email, dinesh.email);
+    assert.ok(adminAssignment.body.data.delivery.assignedAt);
     assert.equal((await assignmentEvent).deliveryId, unassigned.id);
     assignmentSocket.disconnect();
     const assigned = await prisma.delivery.findUniqueOrThrow({ where: { id: unassigned.id } });
     assert.equal(assigned.status, "ASSIGNED");
     assert.equal(assigned.captainId, dinesh.id);
-    expectStatus(await request(baseUrl, `/api/delivery/${unassigned.id}/assign`, apiJson(adminToken, { captainId: ramesh.id })), 409, "duplicate assignment rejected");
+    expectStatus(await request(baseUrl, `/api/admin/orders/${orderId}/assign-captain`, apiJson(adminToken, { captainId: ramesh.id })), 409, "reassignment rejected");
+    const assignedOrderDetails = await request(baseUrl, `/api/admin/orders/${orderId}?tenantId=${tenantId}`, apiJson(adminToken));
+    expectStatus(assignedOrderDetails, 200, "admin retrieves assigned order details");
+    assert.equal(assignedOrderDetails.body.data.delivery.captainId, dinesh.id);
+    assert.equal(assignedOrderDetails.body.data.delivery.status, "ASSIGNED");
+    const assignedOrders = await request(baseUrl, `/api/admin/orders?tenantId=${tenantId}`, apiJson(adminToken));
+    assert.equal(assignedOrders.body.data.find((order: any) => order.id === orderId).delivery.captainId, dinesh.id);
 
     const dineshDashboard = await request(baseUrl, "/api/delivery/dashboard", apiJson(dineshToken));
     expectStatus(dineshDashboard, 200, "Dinesh dashboard");
@@ -149,6 +204,11 @@ const main = async () => {
     const rameshDashboard = await request(baseUrl, "/api/delivery/dashboard", apiJson(rameshToken));
     expectStatus(rameshDashboard, 200, "Ramesh dashboard");
     assert.ok(!JSON.stringify(rameshDashboard.body.data).includes(String(unassigned.id)));
+    const dineshDeliveries = await request(baseUrl, "/api/delivery/my-deliveries", apiJson(dineshToken));
+    expectStatus(dineshDeliveries, 200, "Dinesh sees Admin Orders assignment");
+    assert.ok(dineshDeliveries.body.items.some((delivery: any) => delivery.id === unassigned.id));
+    expectStatus(await request(baseUrl, `/api/delivery/${unassigned.id}`, apiJson(rameshToken)), 403, "other Captain cannot access assigned delivery");
+    expectStatus(await request(baseUrl, `/api/delivery/${unassigned.id}/accept`, apiJson(rameshToken, {}, "POST")), 403, "other Captain cannot accept assigned delivery");
 
     const customerSocket = io(baseUrl, { auth: { token: customerToken }, transports: ["websocket"] });
     const adminSocket = io(baseUrl, { auth: { token: adminToken }, transports: ["websocket"] });
@@ -160,6 +220,9 @@ const main = async () => {
 
     expectStatus(await request(baseUrl, `/api/delivery/${unassigned.id}/accept`, apiJson(dineshToken, {}, "POST")), 200, "Dinesh accepts");
     expectStatus(await request(baseUrl, `/api/delivery/${unassigned.id}/accept`, apiJson(dineshToken, {}, "POST")), 409, "duplicate accept rejected");
+    const acceptedOrderDetails = await request(baseUrl, `/api/admin/orders/${orderId}?tenantId=${tenantId}`, apiJson(adminToken));
+    expectStatus(acceptedOrderDetails, 200, "admin retrieves order after Captain acceptance");
+    assert.equal(acceptedOrderDetails.body.data.delivery.status, "ACCEPTED");
     expectStatus(await request(baseUrl, `/api/delivery/${unassigned.id}/picked-up`, apiJson(dineshToken, {}, "POST")), 200, "Dinesh pickup");
     expectStatus(await request(baseUrl, `/api/delivery/${unassigned.id}/picked-up`, apiJson(dineshToken, {}, "POST")), 409, "duplicate pickup rejected");
     expectStatus(await request(baseUrl, `/api/delivery/${unassigned.id}/out-for-delivery`, apiJson(dineshToken, {}, "POST")), 200, "Dinesh starts delivery");
@@ -194,6 +257,7 @@ const main = async () => {
     const secondOrder = await request(baseUrl, "/api/orders", apiJson(customerToken, { tenantId: "IGNORED_FRONTEND_TENANT", branchId, fulfillmentType: "DELIVERY", deliveryAddressLine: "Second Address", deliveryLatitude: 13.08, deliveryLongitude: 80.27, deliveryPhone: customerPhone, items: [{ productId: product.id, variantId: variant.id, quantity: 1 }] }));
     expectStatus(secondOrder, 201, "second manual order");
     const secondId = secondOrder.body.data.id as number;
+    expectStatus(await request(baseUrl, `/api/admin/orders/${secondId}/assign-captain`, apiJson(adminToken, { captainId: ramesh.id })), 409, "reject assignment before READY");
     await request(baseUrl, `/api/admin/orders/${secondId}/accept`, apiJson(adminToken, { tenantId }, "PATCH"));
     await request(baseUrl, `/api/admin/orders/${secondId}/status`, apiJson(adminToken, { tenantId, status: "PREPARING" }, "PATCH"));
     await request(baseUrl, `/api/admin/orders/${secondId}/status`, apiJson(adminToken, { tenantId, status: "READY" }, "PATCH"));
@@ -207,6 +271,22 @@ const main = async () => {
     const pickupOrder = await request(baseUrl, "/api/orders", apiJson(customerToken, { tenantId: "IGNORED_FRONTEND_TENANT", branchId, fulfillmentType: "PICKUP", items: [{ productId: product.id, variantId: variant.id, quantity: 1 }] }));
     expectStatus(pickupOrder, 201, "pickup order");
     assert.equal(await prisma.delivery.findUnique({ where: { orderId: pickupOrder.body.data.id } }), null);
+    expectStatus(await request(baseUrl, `/api/admin/orders/${pickupOrder.body.data.id}/assign-captain`, apiJson(adminToken, { captainId: dinesh.id })), 409, "reject order without delivery record");
+
+    const missingDeliveryOrder = await request(baseUrl, "/api/orders", apiJson(customerToken, { tenantId: "IGNORED_FRONTEND_TENANT", branchId, fulfillmentType: "DELIVERY", deliveryAddressLine: "Missing Delivery Address", deliveryLatitude: 13.08, deliveryLongitude: 80.27, deliveryPhone: customerPhone, items: [{ productId: product.id, variantId: variant.id, quantity: 1 }] }));
+    expectStatus(missingDeliveryOrder, 201, "create delivery order for missing-record validation");
+    const missingDeliveryOrderId = missingDeliveryOrder.body.data.id as number;
+    for (const status of ["CONFIRMED", "PREPARING", "READY"]) {
+      const response = status === "CONFIRMED"
+        ? await request(baseUrl, `/api/admin/orders/${missingDeliveryOrderId}/accept`, apiJson(adminToken, { tenantId }, "PATCH"))
+        : await request(baseUrl, `/api/admin/orders/${missingDeliveryOrderId}/status`, apiJson(adminToken, { tenantId, status }, "PATCH"));
+      expectStatus(response, 200, `move missing-record test order to ${status}`);
+    }
+    const missingDelivery = await prisma.delivery.findUniqueOrThrow({ where: { orderId: missingDeliveryOrderId } });
+    await prisma.delivery.delete({ where: { id: missingDelivery.id } });
+    const missingRecordAssignment = await request(baseUrl, `/api/admin/orders/${missingDeliveryOrderId}/assign-captain`, apiJson(adminToken, { captainId: dinesh.id }));
+    expectStatus(missingRecordAssignment, 409, "reject READY order with no delivery record");
+    assert.equal(missingRecordAssignment.body.error.code, "DELIVERY_RECORD_NOT_FOUND");
     console.log(JSON.stringify({ passed: true, architecture: "MANUAL_ASSIGNMENT_ONLY", tenantId, orderId, deliveryId: unassigned.id, dineshId: dinesh.id, rameshId: ramesh.id, sureshId: suresh.id }));
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));

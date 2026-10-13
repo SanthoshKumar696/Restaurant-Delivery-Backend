@@ -11,6 +11,7 @@ import {
   acceptAdminOrder,
   rejectAdminOrder,
   cancelAdminOrder,
+  assignCaptainToAdminOrder,
 } from "./order.controller";
 
 import {
@@ -20,9 +21,137 @@ import {
   adminOrderAcceptSchema,
   adminOrderRejectSchema,
   adminOrderCancelSchema,
+  assignCaptainToAdminOrderSchema,
 } from "./order.validation";
 
 const router = Router();
+
+/**
+ * @swagger
+ * /api/admin/orders/{orderId}/assign-captain:
+ *   post:
+ *     summary: Assign a Captain to an order
+ *     description: Assigns an active, tenant-scoped Captain to the existing delivery for a READY delivery order.
+ *     tags:
+ *       - Admin Orders
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: orderId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         example: 101
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - captainId
+ *             properties:
+ *               captainId:
+ *                 type: integer
+ *                 description: Captain profile ID, not a separate StaffUser identifier.
+ *                 example: 12
+ *     responses:
+ *       200:
+ *         description: Captain assigned; returns the updated order and delivery assignment details.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               required: [success, message, data]
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Captain assigned successfully
+ *                 data:
+ *                   type: object
+ *                   required: [id, orderNumber, status, delivery]
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       example: 101
+ *                     orderNumber:
+ *                       type: string
+ *                       example: ORD-20261013-001
+ *                     status:
+ *                       type: string
+ *                       example: READY
+ *                     delivery:
+ *                       type: object
+ *                       required: [id, status, captainId, captain, assignedAt]
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                           example: 55
+ *                         status:
+ *                           type: string
+ *                           example: ASSIGNED
+ *                         captainId:
+ *                           type: integer
+ *                           nullable: true
+ *                           example: 12
+ *                         captain:
+ *                           type: object
+ *                           nullable: true
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                               example: 12
+ *                             name:
+ *                               type: string
+ *                               example: Alex Rider
+ *                             email:
+ *                               type: string
+ *                               nullable: true
+ *                               example: alex.rider@example.com
+ *                             phone:
+ *                               type: string
+ *                               example: "9876543210"
+ *                         assignedAt:
+ *                           type: string
+ *                           format: date-time
+ *                           nullable: true
+ *       400:
+ *         description: Invalid order ID or captain ID.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                 error:
+ *                   type: object
+ *                   properties:
+ *                     code:
+ *                       type: string
+ *                       example: VALIDATION_ERROR
+ *       401:
+ *         description: Admin authentication is required.
+ *       403:
+ *         description: Admin tenant or Captain branch access is denied.
+ *       404:
+ *         description: Order or active Captain was not found in the authenticated tenant.
+ *       409:
+ *         description: Order is not READY, has no delivery record, or the delivery/Captain cannot be assigned.
+ */
+router.post(
+  "/:orderId/assign-captain",
+  requireAdminAuth,
+  validate(assignCaptainToAdminOrderSchema),
+  assignCaptainToAdminOrder
+);
 
 /**
  * @swagger
