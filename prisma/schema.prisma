@@ -366,6 +366,8 @@ model Admin {
   @@map("admins")
 }
 
+// Global case-insensitive email uniqueness is enforced by a functional SQL index
+// in the staff-email-login migration because Prisma cannot model that index.
 model StaffUser {
   id                     Int                     @id @default(autoincrement())
   tenantId               String                  @map("tenant_id") @db.VarChar(20)

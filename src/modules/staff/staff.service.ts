@@ -5,6 +5,7 @@ import {
   CreateStaffInput,
   UpdateStaffInput,
 } from "./staff.types";
+import { ensureUniqueStaffEmail, normalizeStaffEmail } from "./staff-email";
 
 const ensureCaptainHasNoActiveDeliveries = async (staffId: number, tenantId: string) => {
   const activeDelivery = await prisma.delivery.findFirst({
@@ -49,6 +50,9 @@ export const createStaff = async (data: CreateStaffInput) => {
     throw new HttpError("Staff user with this phone number already exists for this tenant", 409, "STAFF_PHONE_CONFLICT");
   }
 
+  const email = normalizeStaffEmail(data.email);
+  await ensureUniqueStaffEmail(email);
+
   // Hash password
   const passwordHash = await bcrypt.hash(data.password, 12);
 
@@ -58,7 +62,7 @@ export const createStaff = async (data: CreateStaffInput) => {
         tenantId: data.tenantId,
         fullName: data.fullName,
         phone: data.phone,
-        email: data.email,
+        email,
         passwordHash,
         role: data.role,
         isActive: data.isActive,
@@ -161,6 +165,10 @@ export const updateStaff = async (
     await ensureCaptainHasNoActiveDeliveries(id, tenantId);
   }
 
+  if (data.email !== undefined) {
+    await ensureUniqueStaffEmail(data.email, id);
+  }
+
   // Check duplicate phone if phone is being changed
   if (data.phone && data.phone !== existingStaff.phone) {
     const phoneExists = await prisma.staffUser.findUnique({
@@ -195,7 +203,7 @@ export const updateStaff = async (
   }
 
   if (data.email !== undefined) {
-    updateData.email = data.email;
+    updateData.email = normalizeStaffEmail(data.email);
   }
 
   if (data.role !== undefined) {

@@ -173,9 +173,17 @@ const testCaptainDeliveryFlow = async (
   }
 
   const crossTenantPhone = phone();
+  const duplicateEmailCaptain = await request(baseUrl, "/api/captains", apiJson(otherAdminToken, {
+    fullName: "Duplicate Email Captain",
+    phone: crossTenantPhone,
+    email: `${captains[0].phone}@e2e.invalid`,
+    password: "Captain@123",
+  }));
+  expectStatus(duplicateEmailCaptain, 409, "staff emails are unique across tenants");
+
   const crossTenantCaptain = await request(baseUrl, "/api/captains", apiJson(otherAdminToken, {
     fullName: "Cross Tenant Captain",
-    phone: crossTenantPhone,
+    phone: phone(),
     email: `${crossTenantPhone}@e2e.invalid`,
     password: "Captain@123",
   }));
@@ -204,20 +212,39 @@ const testCaptainDeliveryFlow = async (
   expectStatus(available, 200, "available captains");
   assert.ok(!available.body.items.some((item: any) => item.id === captains[2].id));
   const inactiveLogin = await request(baseUrl, "/api/auth/staff/login", apiJson(undefined, {
-    tenantId: "T001",
-    phone: captains[2].phone,
+    email: `${captains[2].phone}@e2e.invalid`,
     password: "Captain@123",
   }));
   expectStatus(inactiveLogin, 401, "inactive Captain login denied");
 
+  expectStatus(await request(baseUrl, "/api/auth/staff/login", apiJson(undefined, {
+    email: `${captains[0].phone}@e2e.invalid`,
+    password: "Incorrect@123",
+  })), 401, "invalid staff password denied");
+  expectStatus(await request(baseUrl, "/api/auth/staff/login", apiJson(undefined, {
+    email: "missing.staff@example.invalid",
+    password: "Captain@123",
+  })), 401, "unknown staff email denied");
+  expectStatus(await request(baseUrl, "/api/auth/staff/login", apiJson(undefined, {
+    password: "Captain@123",
+  })), 400, "missing staff email rejected");
+  expectStatus(await request(baseUrl, "/api/auth/staff/login", apiJson(undefined, {
+    email: `${captains[0].phone}@e2e.invalid`,
+  })), 400, "missing staff password rejected");
+
   for (const captain of captains.slice(0, 2)) {
     const login = await request(baseUrl, "/api/auth/staff/login", apiJson(undefined, {
-      tenantId: "T001",
-      phone: captain.phone,
+      email: ` ${captain.phone.toUpperCase()}@E2E.INVALID `,
       password: "Captain@123",
     }));
     expectStatus(login, 200, "Captain login");
     assert.equal(login.body.data.staff.role, "CAPTAIN");
+    assert.equal(login.body.data.staff.staffId, captain.id);
+    assert.equal(login.body.data.staff.captainId, captain.id);
+    assert.equal(login.body.data.staff.tenantId, "T001");
+    assert.equal(login.body.data.staff.branchId, branchId);
+    assert.deepEqual(login.body.data.staff.branchIds, [branchId]);
+    assert.equal("passwordHash" in login.body.data.staff, false);
     assert.ok(jwt.decode(login.body.data.token)?.toString());
     const payload = jwt.decode(login.body.data.token) as { staffId: number; tenantId: string; role: string };
     assert.equal(payload.staffId, captain.id);
@@ -225,7 +252,18 @@ const testCaptainDeliveryFlow = async (
     assert.equal(payload.role, "CAPTAIN");
     captain.token = login.body.data.token;
     expectStatus(await request(baseUrl, "/api/staff", apiJson(captain.token)), 401, "Captain denied admin staff API");
+    expectStatus(await request(baseUrl, "/api/captains/me", apiJson(captain.token)), 200, "Captain token resolves linked profile");
   }
+
+  const managerLogin = await request(baseUrl, "/api/auth/staff/login", apiJson(undefined, {
+    email: manager.body.data.email,
+    password: "Manager@123",
+  }));
+  expectStatus(managerLogin, 200, "non-Captain staff login");
+  assert.equal(managerLogin.body.data.staff.staffId, manager.body.data.id);
+  assert.equal(managerLogin.body.data.staff.tenantId, "T001");
+  assert.equal(managerLogin.body.data.staff.role, "MANAGER");
+  assert.deepEqual(managerLogin.body.data.staff.branchIds, []);
 
   const invalidDeliveryOrder = await request(baseUrl, "/api/orders", apiJson(customerToken, {
     tenantId: "T001",

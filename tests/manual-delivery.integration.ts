@@ -178,7 +178,7 @@ const main = async () => {
     expectStatus(await request(baseUrl, `/api/admin/orders/${orderId}/assign-captain`, apiJson(adminToken, { captainId: inactiveCaptain.body.data.id })), 404, "reject inactive Captain");
 
     const loginByEmail = async (email: string) => {
-      const result = await request(baseUrl, "/api/auth/staff/login", apiJson(undefined, { tenantId, email, password: "delivery@123" }));
+      const result = await request(baseUrl, "/api/auth/staff/login", apiJson(undefined, { email, password: "delivery@123" }));
       expectStatus(result, 200, `staff email login ${email}`);
       const payload = jwt.decode(result.body.data.token) as { staffId: number; tenantId: string; role: string };
       assert.equal(payload.tenantId, tenantId);
@@ -189,7 +189,6 @@ const main = async () => {
     const rameshToken = await loginByEmail(ramesh.email);
     const sureshToken = await loginByEmail(suresh.email);
     const foreignCaptainLogin = await request(baseUrl, "/api/auth/staff/login", apiJson(undefined, {
-      tenantId: foreignTenantId,
       email: `foreign.${suffix}@manual.invalid`,
       password: "delivery@123",
     }));

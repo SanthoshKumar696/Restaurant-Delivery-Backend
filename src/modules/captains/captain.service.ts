@@ -1,6 +1,7 @@
 import bcrypt from "bcrypt";
 import { HttpError } from "../../common/errors/http-error";
 import { prisma } from "../../database/prisma";
+import { ensureUniqueStaffEmail, normalizeStaffEmail } from "../staff/staff-email";
 
 type CreateCaptainInput = {
   fullName: string;
@@ -29,15 +30,7 @@ const ensureUniqueStaffIdentity = async (tenantId: string, phone?: string, email
     }
   }
 
-  if (email) {
-    const existingByEmail = await prisma.staffUser.findFirst({
-      where: { tenantId, email, id: { not: excludeId ?? undefined } },
-      select: { id: true },
-    });
-    if (existingByEmail) {
-      throw new HttpError("Staff user with this email already exists for this tenant", 409, "STAFF_EMAIL_CONFLICT");
-    }
-  }
+  await ensureUniqueStaffEmail(email, excludeId);
 };
 
 const validateBranches = async (tenantId: string, branchIds: string[] = []) => {
@@ -102,6 +95,7 @@ export const createCaptain = async (
   const branchIds = await validateBranches(tenantId, data.branchIds);
 
   await ensureUniqueStaffIdentity(tenantId, data.phone, data.email);
+  const email = normalizeStaffEmail(data.email);
 
   const passwordHash = await bcrypt.hash(data.password, 12);
   const captain = await prisma.$transaction(async (tx) => {
@@ -110,7 +104,7 @@ export const createCaptain = async (
         tenantId,
         fullName: data.fullName,
         phone: data.phone,
-        email: data.email,
+        email,
         passwordHash,
         role: "CAPTAIN",
         isActive: data.isActive,
@@ -220,14 +214,16 @@ export const updateCaptain = async (
   }
 
   const nextPhone = data.phone ?? existing.staffUser.phone;
-  const nextEmail = data.email ?? existing.staffUser.email;
+  const nextEmail = data.email === undefined
+    ? existing.staffUser.email
+    : normalizeStaffEmail(data.email);
 
   if (data.phone && data.phone !== existing.staffUser.phone) {
     await ensureUniqueStaffIdentity(tenantId, data.phone, nextEmail, id);
   }
 
-  if (data.email && data.email !== existing.staffUser.email) {
-    await ensureUniqueStaffIdentity(tenantId, nextPhone, data.email, id);
+  if (data.email !== undefined && nextEmail !== existing.staffUser.email) {
+    await ensureUniqueStaffIdentity(tenantId, nextPhone, nextEmail, id);
   }
 
   const branchIds = data.branchIds === undefined
@@ -235,8 +231,11 @@ export const updateCaptain = async (
     : await validateBranches(tenantId, data.branchIds);
 
   const captain = await prisma.$transaction(async (tx) => {
-    const { vehicleType, vehicleNumber, branchIds: _branchIds, password, ...staffData } = data;
+    const { vehicleType, vehicleNumber, branchIds: _branchIds, password, email: _email, ...staffData } = data;
     const staffUpdateData: Record<string, unknown> = { ...staffData };
+    if (data.email !== undefined) {
+      staffUpdateData.email = nextEmail;
+    }
     if (password !== undefined) {
       staffUpdateData.passwordHash = await bcrypt.hash(password, 12);
     }

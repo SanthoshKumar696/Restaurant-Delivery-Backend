@@ -10,7 +10,7 @@ const router = Router();
  * /api/auth/staff/login:
  *   post:
  *     summary: Authenticate an active staff member
- *     description: No bearer token is required. Send tenantId and password, plus phone or email (at least one). Active staff credentials are verified against the stored bcrypt hash. For CAPTAIN users, the linked Captain profile must exist. The response omits passwordHash; the returned token contains staffId, tenantId, and role.
+ *     description: No bearer token is required. Send the globally unique staff email and password. Email matching is case-insensitive. Active staff credentials are verified against the stored bcrypt hash; the response includes safe staff, tenant, branch, and linked Captain identifiers where applicable.
  *     tags: [Auth]
  *     requestBody:
  *       required: true
@@ -18,30 +18,14 @@ const router = Router();
  *         application/json:
  *           schema:
  *             type: object
- *             required:
- *               - tenantId
- *               - password
- *             anyOf:
- *               - required: [phone]
- *               - required: [email]
+ *             required: [email, password]
+ *             additionalProperties: false
  *             properties:
- *               tenantId:
- *                 type: string
- *                 minLength: 1
- *                 maxLength: 20
- *                 description: Tenant identifier for the staff account being authenticated.
- *                 example: T001
- *               phone:
- *                 type: string
- *                 minLength: 10
- *                 maxLength: 20
- *                 description: Provide phone or email; at least one is required.
- *                 example: "9876543210"
  *               email:
  *                 type: string
  *                 format: email
  *                 maxLength: 150
- *                 description: Provide email or phone; at least one is required.
+ *                 description: Globally unique staff email; matching ignores surrounding whitespace and letter case.
  *                 example: captain@example.com
  *               password:
  *                 type: string
@@ -72,17 +56,22 @@ const router = Router();
  *                       description: 'JWT with staffId, tenantId, and role claims; send as Authorization: Bearer <token>.'
  *                     staff:
  *                       type: object
+ *                       required: [staffId, tenantId, fullName, email, role, branchAssignments, branchIds]
  *                       properties:
  *                         id:
  *                           type: integer
- *                           description: StaffUser ID; for a Captain, the shared primary key is also captainId.
- *                           example: 78
+ *                           description: Legacy-compatible alias of staffId.
+ *                           example: 23
+ *                         staffId:
+ *                           type: integer
+ *                           description: Authenticated StaffUser primary key.
+ *                           example: 23
  *                         tenantId:
  *                           type: string
  *                           example: T001
  *                         fullName:
  *                           type: string
- *                           example: Captain One
+ *                           example: Sam Captain
  *                         phone:
  *                           type: string
  *                           example: "9876543210"
@@ -96,12 +85,39 @@ const router = Router();
  *                         isActive:
  *                           type: boolean
  *                           example: true
+ *                         branchAssignments:
+ *                           type: array
+ *                           items:
+ *                             type: object
+ *                             required: [id, name]
+ *                             properties:
+ *                               id:
+ *                                 type: string
+ *                                 example: T001-B001
+ *                               name:
+ *                                 type: string
+ *                                 example: Main Branch
+ *                         branchIds:
+ *                           type: array
+ *                           items:
+ *                             type: string
+ *                           example: [T001-B001]
+ *                         branchId:
+ *                           type: string
+ *                           description: Included only when the staff member has exactly one authorized branch.
+ *                           example: T001-B001
+ *                         captainId:
+ *                           type: integer
+ *                           description: Included only for staff linked to a valid Captain profile.
+ *                           example: 23
  *       400:
- *         description: Validation failed; tenantId, password, and phone or email are required.
+ *         description: Validation failed; email and password are required, and no other request properties are accepted.
  *       401:
- *         description: Credentials are invalid or staff account is inactive.
+ *         description: Email or password is invalid, or the staff account is inactive.
  *       403:
  *         description: Captain staff account has no linked Captain profile.
+ *       409:
+ *         description: Staff email is not uniquely configured in existing account data.
  *       500:
  *         description: Server authentication configuration is unavailable.
  */
