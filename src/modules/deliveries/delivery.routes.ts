@@ -306,7 +306,7 @@ const router = Router();
  *         schema:
  *           type: integer
  *           minimum: 1
- *           example: 303
+ *           example: 78
  *     responses:
  *       200:
  *         description: Tenant-scoped deliveries; a supplied captainId returns each of that Captain's deliveries as a distinct item.
@@ -342,7 +342,7 @@ const router = Router();
  *         schema:
  *           type: integer
  *           minimum: 1
- *           example: 130
+ *           example: 16
  *     responses:
  *       200:
  *         description: Delivery details including deliveryId, orderId, captainId, statuses, and assignment history.
@@ -376,7 +376,7 @@ const router = Router();
  *         schema:
  *           type: integer
  *           minimum: 1
- *           example: 130
+ *           example: 16
  *     requestBody:
  *       required: true
  *       description: Captain Management ID selected from GET /api/captains.
@@ -391,7 +391,7 @@ const router = Router();
  *                 type: integer
  *                 minimum: 1
  *                 description: Captain profile ID; the Captain profile shares its ID with the linked StaffUser.
- *                 example: 303
+ *                 example: 78
  *     responses:
  *       200:
  *         description: Captain assigned; returns updated delivery record.
@@ -429,7 +429,7 @@ const router = Router();
  *         schema:
  *           type: integer
  *           minimum: 1
- *           example: 130
+ *           example: 16
  *     responses:
  *       200:
  *         description: Assigned delivery with the order details, items, totals, and timestamps
@@ -465,7 +465,7 @@ const router = Router();
  *         schema:
  *           type: integer
  *           minimum: 1
- *           example: 130
+ *           example: 16
  *     responses:
  *       200:
  *         description: Delivery accepted and updated delivery returned
@@ -505,7 +505,7 @@ const router = Router();
  *         schema:
  *           type: integer
  *           minimum: 1
- *           example: 130
+ *           example: 16
  *     responses:
  *       200:
  *         description: Rejection recorded; delivery is unassigned and visible to admins
@@ -547,7 +547,7 @@ const router = Router();
  *         schema:
  *           type: integer
  *           minimum: 1
- *           example: 130
+ *           example: 16
  *     responses:
  *       200:
  *         description: Pickup confirmed; updated delivery returned.
@@ -585,7 +585,7 @@ const router = Router();
  *         schema:
  *           type: integer
  *           minimum: 1
- *           example: 130
+ *           example: 16
  *     responses:
  *       200:
  *         description: Delivery started; updated delivery returned.
@@ -636,9 +636,11 @@ const router = Router();
  *             properties:
  *               latitude:
  *                 type: number
+ *                 description: Current GPS latitude in decimal degrees.
  *                 example: 13.0827
  *               longitude:
  *                 type: number
+ *                 description: Current GPS longitude in decimal degrees.
  *                 example: 80.2707
  *     responses:
  *       200:
@@ -688,7 +690,7 @@ const router = Router();
  *         schema:
  *           type: integer
  *           minimum: 1
- *           example: 130
+ *           example: 16
  *     responses:
  *       200:
  *         description: Captain arrival recorded; updated delivery returned.
@@ -726,7 +728,7 @@ const router = Router();
  *         schema:
  *           type: integer
  *           minimum: 1
- *           example: 130
+ *           example: 16
  *     requestBody:
  *       required: true
  *       content:
@@ -738,6 +740,7 @@ const router = Router();
  *             properties:
  *               otp:
  *                 type: string
+ *                 description: Six-digit code sent to the order's delivery phone by POST /api/delivery/customer/{customerId}/{orderId}/otp.
  *                 example: "123456"
  *     responses:
  *       200:
@@ -783,7 +786,7 @@ const router = Router();
  *         schema:
  *           type: integer
  *           minimum: 1
- *           example: 188
+ *           example: 33
  *     responses:
  *       200:
  *         description: Delivery tracking for the specified order.
@@ -812,7 +815,7 @@ const router = Router();
  *         description: Customer Order ID from the customer order response.
  *         schema:
  *           type: integer
- *           example: 188
+ *           example: 33
  *     responses:
  *       200:
  *         description: Delivery verification code sent

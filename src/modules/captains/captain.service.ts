@@ -80,6 +80,7 @@ const captainSelect = {
 
 const toCaptainResponse = (captain: any) => ({
   id: captain.id,
+  captainId: captain.id,
   staffId: captain.staffUser.id,
   fullName: captain.staffUser.fullName,
   phone: captain.staffUser.phone,

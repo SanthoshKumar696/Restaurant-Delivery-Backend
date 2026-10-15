@@ -21,11 +21,13 @@ const router = Router();
  * /api/captains:
  *   post:
  *     summary: Create a Captain and linked staff login
+ *     description: Requires an admin bearer token; tenant scope is taken from the authenticated admin. The response id is captainId and is also the linked StaffUser.id.
  *     tags: [Captains]
  *     security:
  *       - bearerAuth: []
  *     requestBody:
  *       required: true
+ *       description: Captain profile and staff-login fields. branchIds must come from branches belonging to the authenticated admin's tenant.
  *       content:
  *         application/json:
  *           schema:
@@ -65,29 +67,77 @@ const router = Router();
  *                 type: array
  *                 items:
  *                   type: string
+ *                 description: IDs of tenant branches to which this Captain is assigned.
  *                 example: ["T001-B001"]
  *     responses:
  *       201:
  *         description: Captain created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   $ref: '#/components/schemas/CaptainProfile'
+ *       400:
+ *         description: Invalid Captain fields or branch IDs
+ *       401:
+ *         description: Admin authentication is required
+ *       403:
+ *         description: Branch does not belong to the authenticated tenant
+ *       409:
+ *         description: Phone number or email already exists for this tenant
  *   get:
  *     summary: List tenant Captains and their Captain IDs
- *     description: Each item's id is captainId, the ID to use when assigning a delivery or filtering GET /api/delivery/admin. The ID is also the linked StaffUser.id.
+ *     description: Requires an admin bearer token. Tenant scope comes from the authenticated admin. Each item's id is captainId, the ID to use when assigning a delivery or filtering GET /api/delivery/admin; it is also the linked StaffUser.id.
  *     tags: [Captains]
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
  *         description: Captains fetched successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/CaptainProfile'
+ *       401:
+ *         description: Admin authentication is required
+ *       403:
+ *         description: Admin role or tenant access is required
  * /api/captains/available:
  *   get:
  *     summary: List active Captains without an active delivery
- *     description: Each item's id is captainId, suitable for the captainId request body in assignment.
+ *     description: Requires an admin bearer token. Each item's id is captainId, suitable for the captainId request body in delivery assignment.
  *     tags: [Captains]
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
  *         description: Available captains fetched successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/CaptainProfile'
+ *       401:
+ *         description: Admin authentication is required
+ *       403:
+ *         description: Admin role or tenant access is required
  * /api/captains/me:
  *   get:
  *     summary: Get the authenticated Captain profile
@@ -98,6 +148,15 @@ const router = Router();
  *     responses:
  *       200:
  *         description: Captain profile, including its Captain ID.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   $ref: '#/components/schemas/CaptainProfile'
  *       401:
  *         description: Staff authentication is required
  *       403:
@@ -153,12 +212,29 @@ const router = Router();
  *       - in: path
  *         name: captainId
  *         required: true
+ *         description: Captain profile ID returned by GET /api/captains. This is also the linked StaffUser.id; it is not an orderId or deliveryId.
  *         schema:
  *           type: integer
- *           example: 12
+ *           minimum: 1
+ *           example: 78
  *     responses:
  *       200:
  *         description: Captain fetched successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   $ref: '#/components/schemas/CaptainProfile'
+ *       400:
+ *         description: Invalid captainId
+ *       401:
+ *         description: Admin authentication is required
+ *       404:
+ *         description: Captain not found in the authenticated tenant
  *   put:
  *     summary: Update Captain profile and branch assignments by captainId
  *     description: Enter the captain ID returned by GET /api/captains.
@@ -169,9 +245,11 @@ const router = Router();
  *       - in: path
  *         name: captainId
  *         required: true
+ *         description: Captain profile ID returned by GET /api/captains. This is also the linked StaffUser.id; it is not an orderId or deliveryId.
  *         schema:
  *           type: integer
- *           example: 12
+ *           minimum: 1
+ *           example: 78
  *     requestBody:
  *       required: true
  *       content:
@@ -209,10 +287,28 @@ const router = Router();
  *                 type: array
  *                 items:
  *                   type: string
+ *                 description: Replace the Captain's branch assignments with IDs of branches in the authenticated admin's tenant.
  *                 example: ["T001-B001"]
  *     responses:
  *       200:
  *         description: Captain updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   $ref: '#/components/schemas/CaptainProfile'
+ *       400:
+ *         description: Invalid Captain fields or branch IDs
+ *       401:
+ *         description: Admin authentication is required
+ *       403:
+ *         description: Branch does not belong to the authenticated tenant
+ *       404:
+ *         description: Captain not found in the authenticated tenant
  */
 router.post("/", requireAdminAuth, validate(createCaptainSchema), createCaptain);
 router.get("/", requireAdminAuth, getCaptains);

@@ -325,11 +325,11 @@ const testCaptainDeliveryFlow = async (
   expectStatus(await request(baseUrl, `/api/delivery/${delivery!.id}/location`, apiJson(captains[1].token, { latitude: 13.08, longitude: 80.26 })), 403, "other Captain GPS denied");
   expectStatus(await request(baseUrl, `/api/delivery/${delivery!.id}/location`, apiJson(captains[0].token, { latitude: 100, longitude: 0 })), 400, "invalid GPS rejected");
 
-  const customerTracking = await request(baseUrl, `/api/orders/customer/${customerId}/${orderId}/delivery`, apiJson(customerToken));
+  const customerTracking = await request(baseUrl, `/api/delivery/customer/${customerId}/${orderId}`, apiJson(customerToken));
   expectStatus(customerTracking, 200, "customer tracking");
   assert.equal(customerTracking.body.data.deliveryId, delivery!.id);
   assert.equal(customerTracking.body.data.currentLocation.latitude.toString(), "13.08");
-  const otherCustomerTracking = await request(baseUrl, `/api/orders/customer/${customerId + 999}/${orderId}/delivery`, apiJson(customerToken));
+  const otherCustomerTracking = await request(baseUrl, `/api/delivery/customer/${customerId + 999}/${orderId}`, apiJson(customerToken));
   expectStatus(otherCustomerTracking, 404, "customer ID mismatch tracking denied");
   const adminTracking = await request(baseUrl, `/api/delivery/admin/${delivery!.id}`, apiJson(adminToken));
   expectStatus(adminTracking, 200, "admin tracking");
@@ -384,7 +384,7 @@ const testCaptainDeliveryFlow = async (
   }));
   expectStatus(pickupOrder, 201, "create pickup order");
   assert.equal(await prisma.delivery.findUnique({ where: { orderId: pickupOrder.body.data.id } }), null);
-  expectStatus(await request(baseUrl, `/api/orders/customer/${customerId}/${pickupOrder.body.data.id}/delivery`, apiJson(customerToken)), 404, "pickup has no tracking");
+  expectStatus(await request(baseUrl, `/api/delivery/customer/${customerId}/${pickupOrder.body.data.id}`, apiJson(customerToken)), 404, "pickup has no tracking");
   expectStatus(await request(baseUrl, `/api/admin/orders/${pickupOrder.body.data.id}/accept`, apiJson(adminToken, { tenantId: "T001" }, "PATCH")), 200, "accept pickup order");
   for (const status of ["PREPARING", "READY", "COMPLETED"]) {
     expectStatus(

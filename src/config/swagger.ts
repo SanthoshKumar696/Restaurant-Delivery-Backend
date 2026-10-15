@@ -41,6 +41,45 @@ const options: swaggerJSDoc.Options = {
         },
       },
       schemas: {
+        CaptainProfile: {
+          type: "object",
+          required: ["id", "captainId", "staffId", "fullName", "phone", "role", "isActive"],
+          properties: {
+            id: {
+              type: "integer",
+              description: "Legacy-compatible alias of captainId.",
+              example: 78,
+            },
+            captainId: {
+              type: "integer",
+              description: "Captain profile ID. It is also the linked StaffUser.id.",
+              example: 78,
+            },
+            staffId: {
+              type: "integer",
+              description: "Linked StaffUser primary key; equal to captainId in the shared-primary-key relation.",
+              example: 78,
+            },
+            fullName: { type: "string", example: "Captain One" },
+            phone: { type: "string", example: "9876543210" },
+            email: { type: "string", nullable: true, example: "captain@example.com" },
+            role: { type: "string", enum: ["CAPTAIN"], example: "CAPTAIN" },
+            isActive: { type: "boolean", example: true },
+            vehicleType: { type: "string", nullable: true, example: "Bike" },
+            vehicleNumber: { type: "string", nullable: true, example: "TN01AB1234" },
+            currentStatus: { type: "string", example: "AVAILABLE" },
+            branchAssignments: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  id: { type: "string", example: "T001-B001" },
+                  name: { type: "string", example: "Main Branch" },
+                },
+              },
+            },
+          },
+        },
         CaptainDelivery: {
           type: "object",
           required: ["id", "deliveryId", "orderId", "captainId", "order", "captain", "status", "assignedAt", "acceptedAt"],

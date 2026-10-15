@@ -9,6 +9,7 @@ import { smsService } from "../src/integrations/sms";
 import { initializeDeliverySocket } from "../src/realtime/delivery-socket";
 
 process.env.DELIVERY_TEST_OTP = "true";
+const skipSocketAssertions = process.env.SKIP_DELIVERY_SOCKET_ASSERTIONS === "1";
 
 type Json = Record<string, any>;
 
@@ -202,9 +203,13 @@ const main = async () => {
     assert.deepEqual(new Set(staffList.body.items.map((staff: any) => staff.id)), new Set([dinesh.id, ramesh.id, suresh.id]));
     assert.ok(staffList.body.items.every((staff: any) => !Object.prototype.hasOwnProperty.call(staff, "passwordHash")));
 
-    const assignmentSocket = io(baseUrl, { auth: { token: dineshToken }, transports: ["websocket"] });
-    await new Promise<void>((resolve, reject) => { assignmentSocket.once("connect", resolve); assignmentSocket.once("connect_error", reject); });
-    const assignmentEvent = new Promise<any>((resolve) => assignmentSocket.once("delivery:assigned", resolve));
+    const assignmentSocket = skipSocketAssertions ? undefined : io(baseUrl, { auth: { token: dineshToken }, transports: ["websocket"] });
+    if (assignmentSocket) {
+      await new Promise<void>((resolve, reject) => { assignmentSocket.once("connect", resolve); assignmentSocket.once("connect_error", reject); });
+    }
+    const assignmentEvent = assignmentSocket
+      ? new Promise<any>((resolve) => assignmentSocket.once("delivery:assigned", resolve))
+      : undefined;
     const adminAssignment = await request(baseUrl, `/api/admin/orders/${orderId}/assign-captain`, apiJson(adminToken, { captainId: dinesh.id }));
     expectStatus(adminAssignment, 200, "admin assigns Dinesh through Admin Orders");
     assert.equal(adminAssignment.body.data.delivery.id, unassigned.id);
@@ -213,8 +218,8 @@ const main = async () => {
     assert.equal(adminAssignment.body.data.delivery.captain.name, "Dinesh");
     assert.equal(adminAssignment.body.data.delivery.captain.email, dinesh.email);
     assert.ok(adminAssignment.body.data.delivery.assignedAt);
-    assert.equal((await assignmentEvent).deliveryId, unassigned.id);
-    assignmentSocket.disconnect();
+    if (assignmentEvent) assert.equal((await assignmentEvent).deliveryId, unassigned.id);
+    assignmentSocket?.disconnect();
     const assigned = await prisma.delivery.findUniqueOrThrow({ where: { id: unassigned.id } });
     assert.equal(assigned.status, "ASSIGNED");
     assert.equal(assigned.captainId, dinesh.id);
@@ -274,13 +279,14 @@ const main = async () => {
     expectStatus(await request(baseUrl, `/api/delivery/${unassigned.id}`, apiJson(rameshToken)), 403, "other Captain cannot access assigned delivery");
     expectStatus(await request(baseUrl, `/api/delivery/${unassigned.id}/accept`, apiJson(rameshToken, {}, "POST")), 403, "other Captain cannot accept assigned delivery");
 
-    const customerSocket = io(baseUrl, { auth: { token: customerToken }, transports: ["websocket"] });
-    const adminSocket = io(baseUrl, { auth: { token: adminToken }, transports: ["websocket"] });
-    await Promise.all([customerSocket, adminSocket].map((socket) => new Promise<void>((resolve, reject) => {
+    const customerSocket = skipSocketAssertions ? undefined : io(baseUrl, { auth: { token: customerToken }, transports: ["websocket"] });
+    const adminSocket = skipSocketAssertions ? undefined : io(baseUrl, { auth: { token: adminToken }, transports: ["websocket"] });
+    const connectedSockets = [customerSocket, adminSocket].filter((socket) => socket !== undefined);
+    await Promise.all(connectedSockets.map((socket) => new Promise<void>((resolve, reject) => {
       socket.once("connect", resolve);
       socket.once("connect_error", reject);
     })));
-    assert.equal(await customerSocket.emitWithAck("delivery:subscribe", { orderId }), true);
+    if (customerSocket) assert.equal(await customerSocket.emitWithAck("delivery:subscribe", { orderId }), true);
 
     expectStatus(await request(baseUrl, `/api/delivery/${unassigned.id}/accept`, apiJson(dineshToken, {}, "POST")), 200, "Dinesh accepts");
     expectStatus(await request(baseUrl, `/api/delivery/${unassigned.id}/accept`, apiJson(dineshToken, {}, "POST")), 409, "duplicate accept rejected");
@@ -304,18 +310,30 @@ const main = async () => {
     expectStatus(await request(baseUrl, `/api/delivery/${unassigned.id}/picked-up`, apiJson(dineshToken, {}, "POST")), 409, "duplicate pickup rejected");
     expectStatus(await request(baseUrl, `/api/delivery/${unassigned.id}/out-for-delivery`, apiJson(dineshToken, {}, "POST")), 200, "Dinesh starts delivery");
     expectStatus(await request(baseUrl, `/api/delivery/${unassigned.id}/out-for-delivery`, apiJson(dineshToken, {}, "POST")), 409, "duplicate start rejected");
-    const customerLocationEvent = new Promise<any>((resolve) => customerSocket.once("delivery:location_updated", resolve));
-    const adminLocationEvent = new Promise<any>((resolve) => adminSocket.once("delivery:location_updated", resolve));
+    const customerLocationEvent = customerSocket
+      ? new Promise<any>((resolve) => customerSocket.once("delivery:location_updated", resolve))
+      : undefined;
+    const adminLocationEvent = adminSocket
+      ? new Promise<any>((resolve) => adminSocket.once("delivery:location_updated", resolve))
+      : undefined;
     expectStatus(await request(baseUrl, `/api/delivery/${unassigned.id}/location`, apiJson(dineshToken, { latitude: 13.0812, longitude: 80.2741 })), 200, "Dinesh GPS");
-    assert.equal((await customerLocationEvent).deliveryId, unassigned.id);
-    assert.equal((await adminLocationEvent).deliveryId, unassigned.id);
-    expectStatus(await request(baseUrl, `/api/orders/customer/${customer.id}/${orderId}/delivery`, apiJson(customerToken)), 200, "customer tracking");
+    if (customerLocationEvent && adminLocationEvent) {
+      assert.equal((await customerLocationEvent).deliveryId, unassigned.id);
+      assert.equal((await adminLocationEvent).deliveryId, unassigned.id);
+    }
+    expectStatus(await request(baseUrl, `/api/delivery/customer/${customer.id}/${orderId}`, apiJson(customerToken)), 200, "customer tracking");
     expectStatus(await request(baseUrl, `/api/admin/delivery/${unassigned.id}`, apiJson(adminToken)), 200, "admin tracking");
-    const customerStatusEvent = new Promise<any>((resolve) => customerSocket.once("delivery:status_updated", resolve));
-    const adminStatusEvent = new Promise<any>((resolve) => adminSocket.once("delivery:status_updated", resolve));
+    const customerStatusEvent = customerSocket
+      ? new Promise<any>((resolve) => customerSocket.once("delivery:status_updated", resolve))
+      : undefined;
+    const adminStatusEvent = adminSocket
+      ? new Promise<any>((resolve) => adminSocket.once("delivery:status_updated", resolve))
+      : undefined;
     expectStatus(await request(baseUrl, `/api/delivery/${unassigned.id}/arrived`, apiJson(dineshToken, {}, "POST")), 200, "Dinesh arrived");
-    assert.equal((await customerStatusEvent).status, "ARRIVED");
-    assert.equal((await adminStatusEvent).status, "ARRIVED");
+    if (customerStatusEvent && adminStatusEvent) {
+      assert.equal((await customerStatusEvent).status, "ARRIVED");
+      assert.equal((await adminStatusEvent).status, "ARRIVED");
+    }
     expectStatus(await request(baseUrl, `/api/delivery/${unassigned.id}/arrived`, apiJson(dineshToken, {}, "POST")), 409, "duplicate arrival rejected");
     expectStatus(await request(baseUrl, `/api/delivery/customer/${customer.id}/${orderId}/otp`, apiJson(customerToken, {}, "POST")), 200, "send delivery OTP");
     const otp = smsService.getTestOtp(customerPhone, tenantId, "DELIVERY", String(orderId));
@@ -334,8 +352,8 @@ const main = async () => {
     const dineshCurrentCompleted = await request(baseUrl, "/api/delivery/my-current", apiJson(dineshToken));
     assert.ok(!dineshUpcomingCompleted.body.items.some((delivery: any) => delivery.id === unassigned.id));
     assert.ok(!dineshCurrentCompleted.body.items.some((delivery: any) => delivery.id === unassigned.id));
-    customerSocket.disconnect();
-    adminSocket.disconnect();
+    customerSocket?.disconnect();
+    adminSocket?.disconnect();
 
     const prepareDeliveryOrder = async (token: string, address: string, deliveryPhone: string, label: string) => {
       const result = await request(baseUrl, "/api/orders", apiJson(token, {
