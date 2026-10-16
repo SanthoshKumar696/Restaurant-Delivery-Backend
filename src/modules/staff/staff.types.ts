@@ -8,6 +8,7 @@ export type CreateStaffInput = {
   password: string;
   role: StaffRole;
   isActive?: boolean;
+  branchIds?: string[];
 };
 
 export type UpdateStaffInput = {
@@ -17,6 +18,7 @@ export type UpdateStaffInput = {
   password?: string;
   role?: StaffRole;
   isActive?: boolean;
+  branchIds?: string[];
 };
 
 export type StaffResponse = Omit<StaffUser, "passwordHash">;

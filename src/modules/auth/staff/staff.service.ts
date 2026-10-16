@@ -3,14 +3,18 @@ import jwt, { SignOptions } from "jsonwebtoken";
 import { prisma } from "../../../database/prisma";
 import { HttpError } from "../../../common/errors/http-error";
 import { StaffRole } from "@prisma/client";
+import { normalizeStaffEmail } from "../../staff/staff-email";
 
 export const loginStaff = async (data: {
-  email: string;
+  identifier: string;
   password: string;
 }) => {
-  const email = data.email.trim().toLowerCase();
+  const identifier = data.identifier.trim();
+  const isEmail = identifier.includes("@");
   const matchingStaff = await prisma.staffUser.findMany({
-    where: { email },
+    where: isEmail
+      ? { email: normalizeStaffEmail(identifier) }
+      : { phone: identifier },
     select: {
       id: true,
       tenantId: true,
@@ -41,15 +45,14 @@ export const loginStaff = async (data: {
       },
     },
   });
-  if (matchingStaff.length > 1) {
-    throw new HttpError("Staff email is not uniquely configured", 409, "STAFF_EMAIL_AMBIGUOUS");
-  }
 
   const staff = matchingStaff[0];
-  if (!staff || !staff.isActive) throw new HttpError("Invalid email or password", 401, "INVALID_CREDENTIALS");
+  if (matchingStaff.length !== 1 || !staff || !staff.isActive) {
+    throw new HttpError("Invalid identifier or password", 401, "INVALID_CREDENTIALS");
+  }
 
   const passwordMatches = await bcrypt.compare(data.password, staff.passwordHash);
-  if (!passwordMatches) throw new HttpError("Invalid email or password", 401, "INVALID_CREDENTIALS");
+  if (!passwordMatches) throw new HttpError("Invalid identifier or password", 401, "INVALID_CREDENTIALS");
 
   if (staff.role === "CAPTAIN") {
     if (!staff.captain || staff.captain.tenantId !== staff.tenantId) {

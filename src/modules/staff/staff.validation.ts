@@ -18,7 +18,8 @@ export const createStaffSchema = z.object({
       .string()
       .trim()
       .min(1, "Tenant ID is required")
-      .max(20, "Tenant ID must not exceed 20 characters"),
+      .max(20, "Tenant ID must not exceed 20 characters")
+      .optional(),
 
     fullName: z
       .string()
@@ -46,6 +47,15 @@ export const createStaffSchema = z.object({
 
     role: z.enum(staffRoles),
     isActive: z.boolean().optional(),
+    branchIds: z.array(z.string().trim().min(1)).optional(),
+  }).superRefine((data, context) => {
+    if (data.role === "CAPTAIN" && !data.branchIds?.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["branchIds"],
+        message: "At least one authorized branch is required for a Captain",
+      });
+    }
   }),
 });
 
@@ -93,6 +103,8 @@ export const updateStaffSchema = z.object({
       role: z.enum(staffRoles).optional(),
 
       isActive: z.boolean().optional(),
+
+      branchIds: z.array(z.string().trim().min(1)).optional(),
     })
     .refine((data) => Object.keys(data).length > 0, {
       message: "At least one field is required for update",

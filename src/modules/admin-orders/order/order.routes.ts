@@ -30,8 +30,8 @@ const router = Router();
  * @swagger
  * /api/admin/orders/{orderId}/assign-captain:
  *   post:
- *     summary: Assign a Captain to an order
- *     description: orderId is the customer Order ID from the admin order list or customer order response. captainId is the Captain Management ID from GET /api/captains. The Captain profile ID is shared with its linked StaffUser.id; it is not the orderId or deliveryId.
+ *     summary: Assign or safely reassign a Captain to a ready order
+ *     description: Assigns an unassigned READY delivery or reassigns an ASSIGNED delivery before acceptance. The existing delivery record is retained. orderId is the customer Order ID; captainId is the Captain Management ID from GET /api/captains.
  *     tags:
  *       - Admin Orders
  *     security:
@@ -122,6 +122,20 @@ const router = Router();
  *                           type: string
  *                           format: date-time
  *                           nullable: true
+ *                         previousCaptain:
+ *                           type: object
+ *                           nullable: true
+ *                           description: Previous Captain on reassignment; null for an initial assignment.
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             name:
+ *                               type: string
+ *                             email:
+ *                               type: string
+ *                               nullable: true
+ *                             phone:
+ *                               type: string
  *       400:
  *         description: Invalid order ID or captain ID.
  *         content:
@@ -147,7 +161,7 @@ const router = Router();
  *       404:
  *         description: Order or active Captain was not found in the authenticated tenant.
  *       409:
- *         description: Order is not READY, has no delivery record, or the delivery/Captain cannot be assigned.
+ *         description: Order is not READY, has no delivery record, the delivery has been accepted or progressed, or the Captain has already rejected the delivery.
  */
 router.post(
   "/:orderId/assign-captain",

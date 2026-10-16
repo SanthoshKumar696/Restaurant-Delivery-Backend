@@ -374,8 +374,24 @@ export const assignCaptainToAdminOrder = async (
     throw new HttpError("Delivery record not found for order", 409, "DELIVERY_RECORD_NOT_FOUND");
   }
 
-  await assignDelivery(order.delivery.id, tenantId, captainId);
-  return getAdminOrderById(order.id, tenantId);
+  const assignment = await assignDelivery(order.delivery.id, tenantId, captainId);
+  const updatedOrder = await getAdminOrderById(order.id, tenantId);
+  if (!updatedOrder.delivery) return updatedOrder;
+
+  return {
+    ...updatedOrder,
+    delivery: {
+      ...updatedOrder.delivery,
+      previousCaptain: assignment.previousCaptain
+        ? {
+            id: assignment.previousCaptain.id,
+            name: assignment.previousCaptain.fullName,
+            email: assignment.previousCaptain.email,
+            phone: assignment.previousCaptain.phone,
+          }
+        : null,
+    },
+  };
 };
 
 // -----------------------------------

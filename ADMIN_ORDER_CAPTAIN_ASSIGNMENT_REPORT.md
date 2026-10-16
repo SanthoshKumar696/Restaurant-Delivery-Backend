@@ -1,5 +1,7 @@
 # Admin Order Captain Assignment Diagnostic Report
 
+> Follow-up: assignment now allows a safe pre-acceptance reassignment while preserving the existing delivery record. The current endpoint, login, database, and live OpenAPI verification is in [STAFF_CAPTAIN_ASSIGNMENT_FIX_REPORT.md](./STAFF_CAPTAIN_ASSIGNMENT_FIX_REPORT.md).
+
 ## Result
 
 **PASS** — `POST /api/admin/orders/:orderId/assign-captain` is integrated into the existing Admin Orders route group and was exercised over HTTP on port `5100`. The authenticated Captain retrieved the assigned delivery and accepted it; the Admin order detail then showed delivery status `ACCEPTED`.
@@ -14,10 +16,10 @@
 
 ## Endpoint and behavior
 
-- **Added:** `POST /api/admin/orders/{orderId}/assign-captain`.
+- **Registered:** `POST /api/admin/orders/{orderId}/assign-captain` in the existing Admin Orders route group.
 - Admin identity is required. The tenant comes from `req.admin.tenantId`; the request does not select a tenant.
 - The endpoint finds the order and its existing delivery record in that tenant, requires a READY delivery order, then delegates to the existing `assignDelivery` service. It does not create a delivery or duplicate assignment logic.
-- Shared delivery logic validates the active tenant Captain, branch compatibility, assignment state, availability, and prevents reassignment.
+- Shared delivery logic validates the active tenant Captain, branch compatibility, and assignment state. It now supports pre-acceptance reassignment and prevents reassignment after acceptance or progress.
 - Admin Orders list, status-filtered list, and detail responses now include delivery ID/status, Captain ID/name/email/phone, and `assignedAt`. A delivery without a Captain remains in the list as unassigned. Responses select only non-sensitive Captain fields.
 - The existing tenant-scoped `GET /api/captains` remains the selection-list API; no second Captain list endpoint was added.
 
@@ -50,7 +52,8 @@ The manual integration workflow was run with `PORT=5100` and used HTTP requests 
 | Captain from another tenant | PASS — `404` |
 | Inactive Captain | PASS — `404` |
 | Assignment before READY | PASS — `409` |
-| Reassignment attempt | PASS — `409` |
+| Pre-acceptance reassignment | PASS — `200`; the original Delivery ID is retained and the previous assignment is recorded as cancelled |
+| Reassignment after acceptance | PASS — `409`; the current delivery assignment is preserved |
 | Pickup order without a delivery record | PASS — `409` |
 | READY delivery order with its delivery record absent | PASS — `409`, `DELIVERY_RECORD_NOT_FOUND` |
 

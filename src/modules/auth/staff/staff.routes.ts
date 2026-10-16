@@ -10,29 +10,48 @@ const router = Router();
  * /api/auth/staff/login:
  *   post:
  *     summary: Authenticate an active staff member
- *     description: No bearer token is required. Send the globally unique staff email and password. Email matching is case-insensitive. Active staff credentials are verified against the stored bcrypt hash; the response includes safe staff, tenant, branch, and linked Captain identifiers where applicable.
+ *     description: No bearer token is required. Send a staff email or phone number in identifier with the password. Email matching is case-insensitive. Phone numbers must resolve to exactly one staff account across tenants. The former email property remains as a deprecated compatibility alias. Active staff credentials are verified against the stored bcrypt hash; the response includes safe staff, tenant, branch, and linked Captain identifiers where applicable.
  *     tags: [Auth]
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             required: [email, password]
- *             additionalProperties: false
- *             properties:
- *               email:
- *                 type: string
- *                 format: email
- *                 maxLength: 150
- *                 description: Globally unique staff email; matching ignores surrounding whitespace and letter case.
- *                 example: captain@example.com
- *               password:
- *                 type: string
- *                 minLength: 1
- *                 maxLength: 100
- *                 format: password
- *                 example: Captain@123
+ *             oneOf:
+ *               - type: object
+ *                 required: [identifier, password]
+ *                 additionalProperties: false
+ *                 properties:
+ *                   identifier:
+ *                     type: string
+ *                     minLength: 1
+ *                     maxLength: 150
+ *                     description: Staff email (case-insensitive) or phone number. No separate tenant, phone, or branch field is accepted.
+ *                     example: captain@example.com
+ *                   password:
+ *                     type: string
+ *                     minLength: 1
+ *                     maxLength: 100
+ *                     format: password
+ *                     example: Captain@123
+ *               - type: object
+ *                 deprecated: true
+ *                 required: [email, password]
+ *                 additionalProperties: false
+ *                 properties:
+ *                   email:
+ *                     type: string
+ *                     format: email
+ *                     maxLength: 150
+ *                     deprecated: true
+ *                     description: Legacy email-only compatibility alias. Use identifier for new callers.
+ *                     example: captain@example.com
+ *                   password:
+ *                     type: string
+ *                     minLength: 1
+ *                     maxLength: 100
+ *                     format: password
+ *                     example: Captain@123
  *     responses:
  *       200:
  *         description: Staff authenticated. Returns a bearer token and safe staff profile fields without passwordHash.
@@ -111,13 +130,11 @@ const router = Router();
  *                           description: Included only for staff linked to a valid Captain profile.
  *                           example: 23
  *       400:
- *         description: Validation failed; email and password are required, and no other request properties are accepted.
+ *         description: Validation failed; provide identifier and password (or the deprecated email and password shape) with no extra request properties.
  *       401:
- *         description: Email or password is invalid, or the staff account is inactive.
+ *         description: Identifier or password is invalid, the staff account is inactive, or the phone identifier is ambiguous.
  *       403:
  *         description: Captain staff account has no linked Captain profile.
- *       409:
- *         description: Staff email is not uniquely configured in existing account data.
  *       500:
  *         description: Server authentication configuration is unavailable.
  */

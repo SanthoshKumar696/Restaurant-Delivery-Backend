@@ -1,5 +1,7 @@
 # Captain Delivery API Workflow Report
 
+> Historical snapshot: this run used the former `POST /api/captains` account-creation flow and email-only login. Those contracts were subsequently replaced; see [STAFF_CAPTAIN_ASSIGNMENT_FIX_REPORT.md](./STAFF_CAPTAIN_ASSIGNMENT_FIX_REPORT.md) for current behavior and verification.
+
 ## Backend process and entry point
 
 | Check | Result |
@@ -18,8 +20,9 @@ The running specification reports OpenAPI `3.0.3` and includes 108 paths. The li
 
 | Operation | Live contract |
 | --- | --- |
-| `POST /api/auth/staff/login` | Required JSON body: `tenantId`, `password`, and either `phone` or `email`. No query/path parameters. |
-| `POST /api/captains` | Required Captain create JSON body; Admin bearer auth. |
+| `POST /api/auth/staff/login` | Preferred JSON body: `identifier` and `password` (email or phone); deprecated email/password body remains supported. No tenant, phone, or branch field is required. |
+| `POST /api/staff` with `role: CAPTAIN` | Creates a staff account and its linked Captain profile in one transaction; requires tenant-owned `branchIds`. Admin bearer auth. |
+| `POST /api/captains` | Not registered; account creation is only through staff management. |
 | `GET /api/captains` | Admin bearer auth; no request parameters or body. |
 | `GET /api/captains/{captainId}` / `PUT /api/captains/{captainId}` | Required path `captainId`; Admin bearer auth. PUT also requires a JSON body. |
 | `GET /api/delivery/my-deliveries`, `/my-upcoming`, `/my-current`, `/completed` | Staff bearer auth; no client-supplied captain ID or body. These GETs correctly have no parameters. |
@@ -64,8 +67,8 @@ Fixture identifiers returned by the successful run:
 | Customer authentication | Customer OTP send and verify endpoints; token used for order creation | **PASS**, 200 for both |
 | Order creation | `POST /api/orders`; DELIVERY order response supplied `orderId=198` | **PASS**, 201 |
 | Admin acceptance and readiness | Existing admin accept, PREPARING, and READY routes | **PASS**, each 200 |
-| Captain creation and login | `POST /api/captains` for Dinesh/Ramesh/Suresh; `POST /api/auth/staff/login` with existing staff auth | **PASS**, 201 creates and 200 logins |
-| Admin assignment | `POST /api/admin/orders/198/assign-captain` with `{ "captainId": 333 }` | **PASS**, 200; response and DB show Delivery 139 `ASSIGNED`, Captain 333, and `assignedAt`. |
+| Captain creation and login (historical run) | This earlier run used `POST /api/captains`; current run uses `POST /api/staff` with `role: CAPTAIN` and `identifier` login. | Earlier **PASS**; updated flow evidence is in the current fix report. |
+| Admin assignment and reassignment | `POST /api/admin/orders/{orderId}/assign-captain` with `{ "captainId": ... }` | Initial assignment and pre-acceptance reassignment retain the same Delivery ID; reassignment after acceptance is rejected. |
 | Captain-scoped retrieval | `GET /api/delivery/my-upcoming` and `GET /api/delivery/my-deliveries` with Dinesh's staff token | **PASS**, 200; Delivery 139 / Order 198 returned with customer, address, items, quantities, totals, and timestamps. |
 | Other-captain isolation | The same Captain delivery list/dashboard with Ramesh's token; Ramesh requests detail and acceptance for Delivery 139 | **PASS**, no Delivery 139 in Ramesh's lists; detail and accept return 403. |
 | Tenant isolation | Foreign-tenant Captain is absent from local Captain results; attempts to spoof tenant during assignment are rejected | **PASS**, foreign records do not appear and tenant spoofing returns 403. |

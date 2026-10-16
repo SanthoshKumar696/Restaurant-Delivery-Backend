@@ -363,8 +363,8 @@ const router = Router();
  *         description: Delivery not found in the authenticated tenant
  * /api/delivery/{deliveryId}/assign:
  *   post:
- *     summary: Manually assign a ready delivery to a Captain
- *     description: deliveryId comes from the unassigned delivery record; captainId comes from GET /api/captains. Both IDs are distinct from the orderId.
+ *     summary: Assign or safely reassign a ready delivery to a Captain
+ *     description: Assigns a pending delivery or reassigns an assigned delivery before acceptance. The existing Delivery record is retained. deliveryId comes from the admin deliveries list; captainId comes from GET /api/captains.
  *     tags: [Deliveries]
  *     security:
  *       - bearerAuth: []
@@ -413,7 +413,7 @@ const router = Router();
  *       404:
  *         description: Active Captain or delivery not found in this tenant
  *       409:
- *         description: Order is not READY, pickup order, or delivery is already assigned
+ *         description: Order is not READY, pickup order, delivery has been accepted or progressed, or the Captain has already rejected the delivery
  * /api/delivery/{deliveryId}:
  *   get:
  *     summary: Get one delivery assigned to the authenticated Captain

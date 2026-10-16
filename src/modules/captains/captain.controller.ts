@@ -1,6 +1,5 @@
 import { NextFunction, Request, Response } from "express";
 import {
-  createCaptain as createCaptainService,
   getAvailableCaptains as getAvailableCaptainsService,
   getCaptainAvailability as getCaptainAvailabilityService,
   getCaptainById as getCaptainByIdService,
@@ -29,15 +28,6 @@ export const updateCaptainAvailability = async (req: Request, res: Response, nex
     const data = await updateCaptainAvailabilityService(req.staff!.tenantId, req.staff!.staffId, req.body.status);
     return res.status(200).json({ success: true, data });
   } catch (error) { next(error); }
-};
-
-export const createCaptain = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const captain = await createCaptainService(req.admin!.tenantId, req.body);
-    return res.status(201).json({ success: true, message: "Captain created successfully", data: captain });
-  } catch (error) {
-    next(error);
-  }
 };
 
 export const getCaptains = async (_req: Request, res: Response, next: NextFunction) => {

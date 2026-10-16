@@ -170,6 +170,17 @@ const options: swaggerJSDoc.Options = {
                 fullName: { type: "string" },
               },
             },
+            previousCaptain: {
+              type: "object",
+              nullable: true,
+              description: "Included on an assignment response; the Captain previously assigned before reassignment.",
+              properties: {
+                id: { type: "integer" },
+                fullName: { type: "string" },
+                email: { type: "string", nullable: true },
+                phone: { type: "string" },
+              },
+            },
             status: {
               type: "string",
               enum: ["PENDING", "OFFERED", "ASSIGNED", "ACCEPTED", "PICKED_UP", "OUT_FOR_DELIVERY", "ARRIVED", "DELIVERED", "FAILED", "CANCELLED"],

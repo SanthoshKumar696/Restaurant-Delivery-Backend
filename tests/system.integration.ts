@@ -141,7 +141,6 @@ const testCaptainDeliveryFlow = async (
   const phone = () => String(9000000000 + Math.floor(Math.random() * 90000000));
   const managerPhone = phone();
   const manager = await request(baseUrl, "/api/staff", apiJson(adminToken, {
-    tenantId: "T001",
     fullName: "E2E Manager",
     phone: managerPhone,
     email: `${managerPhone}@e2e.invalid`,
@@ -152,42 +151,88 @@ const testCaptainDeliveryFlow = async (
   expectStatus(manager, 201, "create manager");
   assert.equal(manager.body.data.role, "MANAGER");
   assert.equal(manager.body.data.isActive, true);
+  assert.deepEqual(manager.body.data.branchIds, []);
+  assert.deepEqual(manager.body.data.branchAssignments, []);
   assert.equal("passwordHash" in manager.body.data, false);
+  const tenantMismatch = await request(baseUrl, "/api/staff", apiJson(adminToken, {
+    tenantId: "T002",
+    fullName: "Cross-tenant Staff",
+    phone: phone(),
+    password: "Manager@123",
+    role: "STAFF",
+  }));
+  expectStatus(tenantMismatch, 403, "staff creation rejects a mismatched tenant");
+  assert.equal(tenantMismatch.body.error.code, "TENANT_ACCESS_DENIED");
 
   const captains = [] as Array<{ id: number; phone: string; token: string }>;
   for (const name of ["Captain 1", "Captain 2", "Captain 3"]) {
     const captainPhone = phone();
-    const created = await request(baseUrl, "/api/captains", apiJson(adminToken, {
+    const created = await request(baseUrl, "/api/staff", apiJson(adminToken, {
+      tenantId: "T001",
       fullName: name,
       phone: captainPhone,
       email: `${captainPhone}@e2e.invalid`,
       password: "Captain@123",
+      role: "CAPTAIN",
       isActive: true,
       branchIds: [branchId],
     }));
     expectStatus(created, 201, `create ${name}`);
     assert.equal(created.body.data.role, "CAPTAIN");
     assert.equal(created.body.data.isActive, true);
+    assert.deepEqual(created.body.data.branchIds, [branchId]);
+    assert.deepEqual(created.body.data.branchAssignments.map((branch: any) => branch.id), [branchId]);
+    assert.equal(created.body.data.captainId, created.body.data.id);
     assert.equal("passwordHash" in created.body.data, false);
+    const linkedCaptain = await prisma.captain.findUniqueOrThrow({ where: { id: created.body.data.id } });
+    assert.equal(linkedCaptain.tenantId, "T001");
+    assert.equal(await prisma.captain.count({ where: { id: created.body.data.id } }), 1);
     captains.push({ id: created.body.data.id, phone: captainPhone, token: "" });
   }
 
+  expectStatus(await request(baseUrl, "/api/captains", apiJson(adminToken, {
+    fullName: "Duplicate Captain Route",
+    phone: phone(),
+    email: `${phone()}@e2e.invalid`,
+    password: "Captain@123",
+  })), 404, "separate Captain account-creation route is removed");
+  expectStatus(await request(baseUrl, "/api/staff", apiJson(adminToken, {
+    fullName: "Unauthorized Branch Captain",
+    phone: phone(),
+    password: "Captain@123",
+    role: "CAPTAIN",
+    branchIds: ["B001"],
+  })), 403, "Captain creation rejects another tenant's branch");
+  const unknownBranch = await request(baseUrl, "/api/staff", apiJson(adminToken, {
+    fullName: "Unknown Branch Captain",
+    phone: phone(),
+    password: "Captain@123",
+    role: "CAPTAIN",
+    branchIds: ["NO-SUCH-BRANCH"],
+  }));
+  expectStatus(unknownBranch, 404, "Captain creation rejects an unknown branch ID");
+  assert.equal(unknownBranch.body.error.code, "BRANCH_NOT_FOUND");
+
   const crossTenantPhone = phone();
-  const duplicateEmailCaptain = await request(baseUrl, "/api/captains", apiJson(otherAdminToken, {
+  const duplicateEmailCaptain = await request(baseUrl, "/api/staff", apiJson(otherAdminToken, {
     fullName: "Duplicate Email Captain",
     phone: crossTenantPhone,
     email: `${captains[0].phone}@e2e.invalid`,
     password: "Captain@123",
+    role: "CAPTAIN",
+    branchIds: ["B001"],
   }));
   expectStatus(duplicateEmailCaptain, 409, "staff emails are unique across tenants");
 
-  const crossTenantCaptain = await request(baseUrl, "/api/captains", apiJson(otherAdminToken, {
+  const crossTenantCaptain = await request(baseUrl, "/api/staff", apiJson(otherAdminToken, {
     fullName: "Cross Tenant Captain",
-    phone: phone(),
+    phone: captains[0].phone,
     email: `${crossTenantPhone}@e2e.invalid`,
     password: "Captain@123",
+    role: "CAPTAIN",
+    branchIds: ["B001"],
   }));
-  expectStatus(crossTenantCaptain, 201, "create other-tenant Captain");
+  expectStatus(crossTenantCaptain, 201, "create other-tenant Captain through staff management");
   await prisma.captain.updateMany({ where: { tenantId: "T001" }, data: { currentStatus: "OFFLINE" } });
 
   const staffList = await request(baseUrl, "/api/staff", apiJson(adminToken));
@@ -212,29 +257,29 @@ const testCaptainDeliveryFlow = async (
   expectStatus(available, 200, "available captains");
   assert.ok(!available.body.items.some((item: any) => item.id === captains[2].id));
   const inactiveLogin = await request(baseUrl, "/api/auth/staff/login", apiJson(undefined, {
-    email: `${captains[2].phone}@e2e.invalid`,
+    identifier: `${captains[2].phone}@e2e.invalid`,
     password: "Captain@123",
   }));
   expectStatus(inactiveLogin, 401, "inactive Captain login denied");
 
   expectStatus(await request(baseUrl, "/api/auth/staff/login", apiJson(undefined, {
-    email: `${captains[0].phone}@e2e.invalid`,
+    identifier: `${captains[0].phone}@e2e.invalid`,
     password: "Incorrect@123",
   })), 401, "invalid staff password denied");
   expectStatus(await request(baseUrl, "/api/auth/staff/login", apiJson(undefined, {
-    email: "missing.staff@example.invalid",
+    identifier: "missing.staff@example.invalid",
     password: "Captain@123",
   })), 401, "unknown staff email denied");
   expectStatus(await request(baseUrl, "/api/auth/staff/login", apiJson(undefined, {
     password: "Captain@123",
-  })), 400, "missing staff email rejected");
+  })), 400, "missing staff identifier rejected");
   expectStatus(await request(baseUrl, "/api/auth/staff/login", apiJson(undefined, {
-    email: `${captains[0].phone}@e2e.invalid`,
+    identifier: `${captains[0].phone}@e2e.invalid`,
   })), 400, "missing staff password rejected");
 
   for (const captain of captains.slice(0, 2)) {
     const login = await request(baseUrl, "/api/auth/staff/login", apiJson(undefined, {
-      email: ` ${captain.phone.toUpperCase()}@E2E.INVALID `,
+      identifier: ` ${captain.phone.toUpperCase()}@E2E.INVALID `,
       password: "Captain@123",
     }));
     expectStatus(login, 200, "Captain login");
@@ -254,9 +299,20 @@ const testCaptainDeliveryFlow = async (
     expectStatus(await request(baseUrl, "/api/staff", apiJson(captain.token)), 401, "Captain denied admin staff API");
     expectStatus(await request(baseUrl, "/api/captains/me", apiJson(captain.token)), 200, "Captain token resolves linked profile");
   }
+  const phoneLogin = await request(baseUrl, "/api/auth/staff/login", apiJson(undefined, {
+    identifier: captains[1].phone,
+    password: "Captain@123",
+  }));
+  expectStatus(phoneLogin, 200, "phone identifier login");
+  assert.equal(phoneLogin.body.data.staff.staffId, captains[1].id);
+  const ambiguousPhoneLogin = await request(baseUrl, "/api/auth/staff/login", apiJson(undefined, {
+    identifier: captains[0].phone,
+    password: "Captain@123",
+  }));
+  expectStatus(ambiguousPhoneLogin, 401, "ambiguous cross-tenant phone login is rejected");
 
   const managerLogin = await request(baseUrl, "/api/auth/staff/login", apiJson(undefined, {
-    email: manager.body.data.email,
+    identifier: manager.body.data.email,
     password: "Manager@123",
   }));
   expectStatus(managerLogin, 200, "non-Captain staff login");
@@ -264,6 +320,11 @@ const testCaptainDeliveryFlow = async (
   assert.equal(managerLogin.body.data.staff.tenantId, "T001");
   assert.equal(managerLogin.body.data.staff.role, "MANAGER");
   assert.deepEqual(managerLogin.body.data.staff.branchIds, []);
+  const legacyEmailLogin = await request(baseUrl, "/api/auth/staff/login", apiJson(undefined, {
+    email: manager.body.data.email,
+    password: "Manager@123",
+  }));
+  expectStatus(legacyEmailLogin, 200, "legacy email login compatibility");
 
   const invalidDeliveryOrder = await request(baseUrl, "/api/orders", apiJson(customerToken, {
     tenantId: "T001",
@@ -337,31 +398,52 @@ const testCaptainDeliveryFlow = async (
       captainSocket.once("connect_error", reject);
     });
     const assignmentEvent = new Promise<any>((resolve) => captainSocket.once("delivery:assigned", resolve));
-    const assignment = await request(baseUrl, `/api/delivery/${delivery!.id}/assign`, apiJson(adminToken, { captainId: captains[0].id }));
+    const assignment = await request(baseUrl, `/api/admin/orders/${orderId}/assign-captain`, apiJson(adminToken, { captainId: captains[0].id }));
     expectStatus(assignment, 200, "assign delivery after ready");
-    assert.equal(assignment.body.data.status, "ASSIGNED");
-    assert.equal(assignment.body.data.captain.id, captains[0].id);
+    assert.equal(assignment.body.data.delivery.status, "ASSIGNED");
+    assert.equal(assignment.body.data.delivery.captain.id, captains[0].id);
     assert.deepEqual(await assignmentEvent, { deliveryId: delivery!.id, orderId });
   } finally {
     captainSocket.disconnect();
   }
-  expectStatus(await request(baseUrl, `/api/delivery/${delivery!.id}/assign`, apiJson(adminToken, { captainId: captains[1].id })), 409, "duplicate assignment denied");
-  expectStatus(await request(baseUrl, `/api/captains/${captains[0].id}`, apiJson(adminToken, { isActive: false }, "PUT")), 409, "assigned Captain cannot be deactivated");
-  expectStatus(await request(baseUrl, `/api/staff/${captains[0].id}`, apiJson(adminToken, { role: "STAFF" }, "PUT")), 409, "assigned Captain role cannot be changed");
-  expectStatus(await request(baseUrl, `/api/delivery/${delivery!.id}`, apiJson(captains[1].token)), 403, "other Captain denied delivery detail");
-  const myDeliveries = await request(baseUrl, "/api/delivery/my-deliveries", apiJson(captains[0].token));
+  const reassignment = await request(baseUrl, `/api/admin/orders/${orderId}/assign-captain`, apiJson(adminToken, { captainId: captains[1].id }));
+  expectStatus(reassignment, 200, "reassign before Captain acceptance");
+  assert.equal(reassignment.body.data.delivery.id, delivery!.id);
+  assert.equal(reassignment.body.data.delivery.captainId, captains[1].id);
+  assert.equal(reassignment.body.data.delivery.previousCaptain.id, captains[0].id);
+  assert.equal(reassignment.body.data.delivery.previousCaptain.name, "Captain 1");
+  assert.equal(await prisma.delivery.count({ where: { orderId } }), 1, "reassignment retains one delivery record");
+  const reassignedDelivery = await prisma.delivery.findUniqueOrThrow({ where: { orderId } });
+  assert.equal(reassignedDelivery.id, delivery!.id);
+  assert.equal(reassignedDelivery.captainId, captains[1].id);
+  const cancelledOffer = await prisma.deliveryOffer.findUniqueOrThrow({
+    where: { deliveryId_captainId: { deliveryId: delivery!.id, captainId: captains[0].id } },
+  });
+  assert.equal(cancelledOffer.status, "CANCELLED");
+  expectStatus(await request(baseUrl, `/api/admin/orders/${orderId}/assign-captain`, apiJson(adminToken, { captainId: captains[1].id })), 409, "same Captain reassignment denied");
+  expectStatus(await request(baseUrl, `/api/captains/${captains[1].id}`, apiJson(adminToken, { isActive: false }, "PUT")), 409, "assigned Captain cannot be deactivated");
+  expectStatus(await request(baseUrl, `/api/staff/${captains[1].id}`, apiJson(adminToken, { role: "STAFF" }, "PUT")), 409, "assigned Captain role cannot be changed");
+  expectStatus(await request(baseUrl, `/api/delivery/${delivery!.id}`, apiJson(captains[0].token)), 403, "previous Captain denied delivery detail");
+  const previousCaptainDeliveries = await request(baseUrl, "/api/delivery/my-upcoming", apiJson(captains[0].token));
+  expectStatus(previousCaptainDeliveries, 200, "previous Captain upcoming list");
+  assert.ok(!previousCaptainDeliveries.body.items.some((item: any) => item.id === delivery!.id));
+  expectStatus(await request(baseUrl, `/api/delivery/${delivery!.id}`, apiJson(captains[1].token)), 200, "new Captain sees reassigned delivery");
+  const myDeliveries = await request(baseUrl, "/api/delivery/my-deliveries", apiJson(captains[1].token));
   expectStatus(myDeliveries, 200, "Captain delivery list");
   assert.ok(myDeliveries.body.items.some((item: any) => item.id === delivery!.id));
 
-  for (const action of ["accept", "picked-up", "out-for-delivery"] as const) {
-    const result = await request(baseUrl, `/api/delivery/${delivery!.id}/${action}`, apiJson(captains[0].token, {}, "POST"));
+  const acceptedDelivery = await request(baseUrl, `/api/delivery/${delivery!.id}/accept`, apiJson(captains[1].token, {}, "POST"));
+  expectStatus(acceptedDelivery, 200, "new Captain accepts reassigned delivery");
+  expectStatus(await request(baseUrl, `/api/admin/orders/${orderId}/assign-captain`, apiJson(adminToken, { captainId: captains[0].id })), 409, "accepted delivery cannot be reassigned");
+  for (const action of ["picked-up", "out-for-delivery"] as const) {
+    const result = await request(baseUrl, `/api/delivery/${delivery!.id}/${action}`, apiJson(captains[1].token, {}, "POST"));
     expectStatus(result, 200, `Captain ${action}`);
   }
-  const location = await request(baseUrl, `/api/delivery/${delivery!.id}/location`, apiJson(captains[0].token, { latitude: 13.08, longitude: 80.26 }));
+  const location = await request(baseUrl, `/api/delivery/${delivery!.id}/location`, apiJson(captains[1].token, { latitude: 13.08, longitude: 80.26 }));
   expectStatus(location, 200, "Captain GPS update");
   assert.equal(location.body.data.deliveryId, delivery!.id);
-  expectStatus(await request(baseUrl, `/api/delivery/${delivery!.id}/location`, apiJson(captains[1].token, { latitude: 13.08, longitude: 80.26 })), 403, "other Captain GPS denied");
-  expectStatus(await request(baseUrl, `/api/delivery/${delivery!.id}/location`, apiJson(captains[0].token, { latitude: 100, longitude: 0 })), 400, "invalid GPS rejected");
+  expectStatus(await request(baseUrl, `/api/delivery/${delivery!.id}/location`, apiJson(captains[0].token, { latitude: 13.08, longitude: 80.26 })), 403, "previous Captain GPS denied");
+  expectStatus(await request(baseUrl, `/api/delivery/${delivery!.id}/location`, apiJson(captains[1].token, { latitude: 100, longitude: 0 })), 400, "invalid GPS rejected");
 
   const customerTracking = await request(baseUrl, `/api/delivery/customer/${customerId}/${orderId}`, apiJson(customerToken));
   expectStatus(customerTracking, 200, "customer tracking");
@@ -385,7 +467,7 @@ const testCaptainDeliveryFlow = async (
 
     const nextCustomerLocation = new Promise<any>((resolve) => customerSocket.once("delivery:location_updated", resolve));
     const nextAdminLocation = new Promise<any>((resolve) => adminSocket.once("delivery:location_updated", resolve));
-    const realtimeUpdate = await request(baseUrl, `/api/delivery/${delivery!.id}/location`, apiJson(captains[0].token, { latitude: 13.081, longitude: 80.269 }));
+    const realtimeUpdate = await request(baseUrl, `/api/delivery/${delivery!.id}/location`, apiJson(captains[1].token, { latitude: 13.081, longitude: 80.269 }));
     expectStatus(realtimeUpdate, 200, "realtime Captain GPS update");
     const [customerEvent, adminEvent] = await Promise.all([nextCustomerLocation, nextAdminLocation]);
     for (const event of [customerEvent, adminEvent]) {
@@ -397,7 +479,7 @@ const testCaptainDeliveryFlow = async (
 
     const customerStatus = new Promise<any>((resolve) => customerSocket.once("delivery:status_updated", resolve));
     const adminStatus = new Promise<any>((resolve) => adminSocket.once("delivery:status_updated", resolve));
-    const arrived = await request(baseUrl, `/api/delivery/${delivery!.id}/arrived`, apiJson(captains[0].token, {}, "POST"));
+    const arrived = await request(baseUrl, `/api/delivery/${delivery!.id}/arrived`, apiJson(captains[1].token, {}, "POST"));
     expectStatus(arrived, 200, "Captain arrived");
     const [customerStatusEvent, adminStatusEvent] = await Promise.all([customerStatus, adminStatus]);
     for (const event of [customerStatusEvent, adminStatusEvent]) {
@@ -410,7 +492,7 @@ const testCaptainDeliveryFlow = async (
     adminSocket.disconnect();
   }
 
-  const badOtp = await request(baseUrl, `/api/delivery/${delivery!.id}/complete`, apiJson(captains[0].token, { otp: "000000" }));
+  const badOtp = await request(baseUrl, `/api/delivery/${delivery!.id}/complete`, apiJson(captains[1].token, { otp: "000000" }));
   expectStatus(badOtp, 400, "invalid delivery OTP rejected");
 
   const pickupOrder = await request(baseUrl, "/api/orders", apiJson(customerToken, {
@@ -455,6 +537,35 @@ const main = async () => {
     const t2Tokens = t2Customers.map((customer) => tokenForCustomer(customer.id, "T002", customer.phone));
     const t1AdminToken = await loginAdmin(baseUrl, "e2e_v1_t001_admin");
     const t2AdminToken = await loginAdmin(baseUrl, "e2e_v1_t002_admin");
+
+    const multiBranchPhone = String(7000000000 + Math.floor(Math.random() * 90000000));
+    const multiBranchStaff = await request(baseUrl, "/api/staff", apiJson(t2AdminToken, {
+      tenantId: "T002",
+      fullName: "Multi-branch E2E Staff",
+      phone: multiBranchPhone,
+      email: `${multiBranchPhone}@e2e.invalid`,
+      password: "Staff@123",
+      role: "STAFF",
+      branchIds: fixtures.t2Branches.map((branch) => branch.id),
+    }));
+    expectStatus(multiBranchStaff, 201, "create staff with multiple tenant branches");
+    assert.equal(multiBranchStaff.body.data.tenantId, "T002");
+    assert.deepEqual(
+      multiBranchStaff.body.data.branchIds.sort(),
+      fixtures.t2Branches.map((branch) => branch.id).sort()
+    );
+    assert.deepEqual(
+      multiBranchStaff.body.data.branchAssignments.map((branch: any) => branch.id).sort(),
+      fixtures.t2Branches.map((branch) => branch.id).sort()
+    );
+    const multiBranchAssignments = await prisma.staffBranchAssignment.findMany({
+      where: { staffId: multiBranchStaff.body.data.id, tenantId: "T002" },
+      select: { branchId: true },
+    });
+    assert.deepEqual(
+      multiBranchAssignments.map((assignment) => assignment.branchId).sort(),
+      fixtures.t2Branches.map((branch) => branch.id).sort()
+    );
 
     const onboardingSlug = `public-${Date.now()}`;
     const tenantCreate = await request(baseUrl, "/api/tenants", apiJson(undefined, {

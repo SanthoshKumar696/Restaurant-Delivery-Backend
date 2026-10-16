@@ -26,7 +26,7 @@ const router = Router();
  * /api/staff:
  *   post:
  *     summary: Create a staff user
- *     description: Creates a new staff user under an existing tenant. The password is securely hashed using bcrypt.
+ *     description: Creates a staff user in the authenticated admin's tenant. Set role to CAPTAIN and provide at least one authorized branch ID to create the linked Captain profile. The password is securely hashed using bcrypt.
  *     tags:
  *       - Staff
  *     security:
@@ -38,7 +38,6 @@ const router = Router();
  *           schema:
  *             type: object
  *             required:
- *               - tenantId
  *               - fullName
  *               - phone
  *               - password
@@ -46,7 +45,8 @@ const router = Router();
  *             properties:
  *               tenantId:
  *                 type: string
- *                 example: T001
+ *                 description: Optional assertion of the tenant. The server always derives the tenant from the authenticated admin and rejects a different value.
+ *                 example: T032
  *               fullName:
  *                 type: string
  *                 example: Raj Kumar
@@ -70,13 +70,66 @@ const router = Router();
  *                   - MANAGER
  *                   - SUPPORT
  *                 example: STAFF
+ *               branchIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Exact Branch.id values from the database, belonging to the authenticated admin's tenant. IDs are opaque and must not be constructed by prefixing the tenant ID. Required for role CAPTAIN.
+ *                 example: ["B031"]
  *     responses:
  *       201:
  *         description: Staff user created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       example: 42
+ *                     tenantId:
+ *                       type: string
+ *                       example: T032
+ *                     role:
+ *                       type: string
+ *                       example: CAPTAIN
+ *                     captainId:
+ *                       type: integer
+ *                       description: Present for CAPTAIN; equals the linked StaffUser ID.
+ *                       example: 42
+ *                     branchAssignments:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: string
+ *                             description: Exact Branch.id from the database.
+ *                             example: B031
+ *                           name:
+ *                             type: string
+ *                             example: Main Branch
+ *                     branchIds:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                       example: ["B031"]
+ *                     branchId:
+ *                       type: string
+ *                       description: Present when exactly one branch is assigned.
+ *                       example: B031
  *       400:
  *         description: Validation failed
+ *       403:
+ *         description: Tenant mismatch, inaccessible branch, or inactive branch
  *       404:
- *         description: Tenant not found
+ *         description: Branch not found
  *       500:
  *         description: Internal server error
  */
@@ -92,7 +145,7 @@ router.post(
  * /api/staff:
  *   get:
  *     summary: Get all staff users
- *     description: Returns all staff users across all tenants.
+ *     description: Returns staff users belonging to the authenticated admin's tenant.
  *     tags:
  *       - Staff
  *     security:

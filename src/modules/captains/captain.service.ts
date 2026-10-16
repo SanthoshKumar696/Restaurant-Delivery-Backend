@@ -3,20 +3,15 @@ import { HttpError } from "../../common/errors/http-error";
 import { prisma } from "../../database/prisma";
 import { ensureUniqueStaffEmail, normalizeStaffEmail } from "../staff/staff-email";
 
-type CreateCaptainInput = {
-  fullName: string;
-  phone: string;
-  email: string;
-  password: string;
+type UpdateCaptainInput = {
+  fullName?: string;
+  phone?: string;
+  email?: string | null;
+  password?: string;
   isActive?: boolean;
   vehicleType?: string | null;
   vehicleNumber?: string | null;
   branchIds?: string[];
-};
-
-type UpdateCaptainInput = Partial<Omit<CreateCaptainInput, "password" | "email">> & {
-  email?: string | null;
-  password?: string;
 };
 
 const ensureUniqueStaffIdentity = async (tenantId: string, phone?: string, email?: string | null, excludeId?: number) => {
@@ -87,48 +82,6 @@ const toCaptainResponse = (captain: any) => ({
     (assignment: any) => assignment.branch
   ),
 });
-
-export const createCaptain = async (
-  tenantId: string,
-  data: CreateCaptainInput
-) => {
-  const branchIds = await validateBranches(tenantId, data.branchIds);
-
-  await ensureUniqueStaffIdentity(tenantId, data.phone, data.email);
-  const email = normalizeStaffEmail(data.email);
-
-  const passwordHash = await bcrypt.hash(data.password, 12);
-  const captain = await prisma.$transaction(async (tx) => {
-    const staff = await tx.staffUser.create({
-      data: {
-        tenantId,
-        fullName: data.fullName,
-        phone: data.phone,
-        email,
-        passwordHash,
-        role: "CAPTAIN",
-        isActive: data.isActive,
-      },
-    });
-    await tx.captain.create({
-      data: {
-        id: staff.id,
-        tenantId,
-        vehicleType: data.vehicleType,
-        vehicleNumber: data.vehicleNumber,
-        captainBranchAssignments: {
-          create: branchIds.map((branchId) => ({ tenantId, branchId })),
-        },
-      },
-    });
-    return tx.captain.findFirstOrThrow({
-      where: { id: staff.id, tenantId },
-      select: captainSelect,
-    });
-  });
-
-  return toCaptainResponse(captain);
-};
 
 export const getCaptains = async (tenantId: string) => {
   const captains = await prisma.captain.findMany({
@@ -229,6 +182,9 @@ export const updateCaptain = async (
   const branchIds = data.branchIds === undefined
     ? undefined
     : await validateBranches(tenantId, data.branchIds);
+  if (branchIds?.length === 0) {
+    throw new HttpError("At least one authorized branch is required for a Captain", 400, "CAPTAIN_BRANCH_REQUIRED");
+  }
 
   const captain = await prisma.$transaction(async (tx) => {
     const { vehicleType, vehicleNumber, branchIds: _branchIds, password, email: _email, ...staffData } = data;

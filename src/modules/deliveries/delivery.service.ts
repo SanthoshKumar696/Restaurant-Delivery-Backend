@@ -182,45 +182,171 @@ export const assignDelivery = async (id: number, tenantId: string, captainId: nu
   if (delivery.order.status !== "READY") {
     throw new HttpError("Delivery can only be assigned when the order is ready", 409, "ORDER_NOT_READY");
   }
-  if (delivery.status !== "PENDING" || delivery.captainId !== null) {
-    throw new HttpError("Delivery is already assigned or no longer assignable", 409, "DELIVERY_NOT_ASSIGNABLE");
-  }
 
-  const captain = await prisma.captain.findFirst({
-    where: { id: captainId, tenantId, staffUser: { role: "CAPTAIN", isActive: true } },
-    include: { captainBranchAssignments: { select: { branchId: true } } },
-  });
-  if (!captain) throw new HttpError("Active Captain not found", 404, "CAPTAIN_NOT_FOUND");
-  const priorOffer = await prisma.deliveryOffer.findUnique({
-    where: { deliveryId_captainId: { deliveryId: id, captainId } },
-    select: { status: true },
-  });
-  if (priorOffer?.status === "REJECTED") {
-    throw new HttpError("This Captain has already rejected the delivery", 409, "CAPTAIN_PREVIOUSLY_REJECTED");
-  }
-  if (captain.captainBranchAssignments.length && !captain.captainBranchAssignments.some((assignment) => assignment.branchId === delivery.order.branchId)) {
-    throw new HttpError("Captain is not assigned to this branch", 403, "CAPTAIN_BRANCH_ACCESS_DENIED");
-  }
+  const assignment = await prisma.$transaction(async (tx) => {
+    const current = await tx.delivery.findFirst({
+      where: { id, tenantId },
+      select: {
+        id: true,
+        status: true,
+        captainId: true,
+        assignedAt: true,
+        acceptedAt: true,
+        pickedUpAt: true,
+        outForDeliveryAt: true,
+        arrivedAt: true,
+        deliveredAt: true,
+        captain: {
+          select: {
+            id: true,
+            staffUser: { select: { fullName: true, email: true, phone: true } },
+          },
+        },
+        order: {
+          select: {
+            id: true,
+            tenantId: true,
+            status: true,
+            fulfillmentType: true,
+          },
+        },
+      },
+    });
+    if (!current || current.order.tenantId !== tenantId) {
+      throw new HttpError("Delivery not found", 404, "DELIVERY_NOT_FOUND");
+    }
+    if (current.order.fulfillmentType !== "DELIVERY") {
+      throw new HttpError("Pickup orders cannot be assigned to a Captain", 409, "PICKUP_NOT_ASSIGNABLE");
+    }
+    if (current.order.status !== "READY") {
+      throw new HttpError("Delivery can only be assigned when the order is ready", 409, "ORDER_NOT_READY");
+    }
 
-  const assigned = await prisma.$transaction(async (tx) => {
+    const captain = await tx.captain.findFirst({
+      where: { id: captainId, tenantId, staffUser: { role: "CAPTAIN", isActive: true } },
+      include: {
+        captainBranchAssignments: {
+          where: { tenantId, branch: { tenantId } },
+          select: { tenantId: true, branchId: true },
+        },
+      },
+    });
+    if (!captain) throw new HttpError("Active Captain not found", 404, "CAPTAIN_NOT_FOUND");
+    if (!captain.captainBranchAssignments.some(
+      (branchAssignment) => branchAssignment.tenantId === tenantId &&
+        branchAssignment.branchId === delivery.order.branchId
+    )) {
+      throw new HttpError("Captain is not assigned to this branch", 403, "CAPTAIN_BRANCH_ACCESS_DENIED");
+    }
+
+    const hasNoProgressTimestamps = !current.acceptedAt && !current.pickedUpAt &&
+      !current.outForDeliveryAt && !current.arrivedAt && !current.deliveredAt;
+    const initialAssignment = current.status === "PENDING" && current.captainId === null && hasNoProgressTimestamps;
+    const reassignment = current.status === "ASSIGNED" && current.captainId !== null &&
+      current.captainId !== captainId && hasNoProgressTimestamps;
+    if (!initialAssignment && !reassignment) {
+      throw new HttpError("Delivery is already assigned or no longer assignable", 409, "DELIVERY_NOT_ASSIGNABLE");
+    }
+
+    const priorOffer = await tx.deliveryOffer.findUnique({
+      where: { deliveryId_captainId: { deliveryId: id, captainId } },
+      select: { status: true },
+    });
+    if (priorOffer?.status === "REJECTED") {
+      throw new HttpError("This Captain has already rejected the delivery", 409, "CAPTAIN_PREVIOUSLY_REJECTED");
+    }
+    if (priorOffer?.status === "ACCEPTED") {
+      throw new HttpError("This Captain has already accepted the delivery", 409, "DELIVERY_NOT_ASSIGNABLE");
+    }
+    if (reassignment && current.captainId !== null) {
+      const previousOffer = await tx.deliveryOffer.findUnique({
+        where: { deliveryId_captainId: { deliveryId: id, captainId: current.captainId } },
+        select: { status: true },
+      });
+      if (previousOffer?.status === "ACCEPTED") {
+        throw new HttpError("Accepted deliveries cannot be reassigned", 409, "DELIVERY_NOT_ASSIGNABLE");
+      }
+      if (previousOffer?.status === "REJECTED") {
+        throw new HttpError("Delivery assignment history is inconsistent", 409, "DELIVERY_NOT_ASSIGNABLE");
+      }
+    }
+
     const assignedAt = new Date();
     const result = await tx.delivery.updateMany({
-      where: { id, tenantId, status: "PENDING", captainId: null },
-      data: { captainId, status: "ASSIGNED", assignedAt },
+      where: {
+        id,
+        tenantId,
+        status: current.status,
+        captainId: current.captainId,
+        acceptedAt: null,
+        pickedUpAt: null,
+        outForDeliveryAt: null,
+        arrivedAt: null,
+        deliveredAt: null,
+      },
+      data: {
+        captainId,
+        status: "ASSIGNED",
+        assignedAt,
+        acceptedAt: null,
+        pickedUpAt: null,
+        outForDeliveryAt: null,
+        arrivedAt: null,
+        deliveredAt: null,
+      },
     });
-    if (result.count === 1) {
-      await tx.deliveryOffer.upsert({
-        where: { deliveryId_captainId: { deliveryId: id, captainId } },
-        update: { tenantId, status: "OFFERED", offeredAt: assignedAt, respondedAt: null },
-        create: { deliveryId: id, captainId, tenantId, status: "OFFERED", offeredAt: assignedAt },
-      });
-      await tx.captain.update({ where: { id: captainId }, data: { currentStatus: "BUSY" } });
+    if (result.count !== 1) {
+      throw new HttpError("Delivery state changed; reload and retry", 409, "DELIVERY_STATE_CHANGED");
     }
-    return result;
+
+    if (reassignment && current.captainId !== null) {
+      await tx.deliveryOffer.upsert({
+        where: { deliveryId_captainId: { deliveryId: id, captainId: current.captainId } },
+        update: { tenantId, status: "CANCELLED", respondedAt: assignedAt },
+        create: {
+          deliveryId: id,
+          captainId: current.captainId,
+          tenantId,
+          status: "CANCELLED",
+          offeredAt: current.assignedAt ?? assignedAt,
+          respondedAt: assignedAt,
+        },
+      });
+    }
+    await tx.deliveryOffer.upsert({
+      where: { deliveryId_captainId: { deliveryId: id, captainId } },
+      update: { tenantId, status: "OFFERED", offeredAt: assignedAt, respondedAt: null },
+      create: { deliveryId: id, captainId, tenantId, status: "OFFERED", offeredAt: assignedAt },
+    });
+    await tx.captain.update({ where: { id: captainId }, data: { currentStatus: "BUSY" } });
+
+    if (reassignment && current.captainId !== null) {
+      const otherActiveDelivery = await tx.delivery.findFirst({
+        where: { tenantId, captainId: current.captainId, status: { notIn: terminalDeliveryStatuses } },
+        select: { id: true },
+      });
+      await tx.captain.update({
+        where: { id: current.captainId },
+        data: { currentStatus: otherActiveDelivery ? "BUSY" : "AVAILABLE" },
+      });
+    }
+
+    return {
+      previousCaptain: reassignment && current.captain
+        ? {
+            id: current.captain.id,
+            fullName: current.captain.staffUser.fullName,
+            email: current.captain.staffUser.email,
+            phone: current.captain.staffUser.phone,
+          }
+        : null,
+    };
   });
-  if (assigned.count !== 1) throw new HttpError("Delivery is already assigned", 409, "DELIVERY_NOT_ASSIGNABLE");
   emitDeliveryAssigned(tenantId, captainId, id, delivery.order.id);
-  return toDeliveryResponse(await findDelivery(id, tenantId));
+  return {
+    ...await toDeliveryResponse(await findDelivery(id, tenantId)),
+    previousCaptain: assignment.previousCaptain,
+  };
 };
 
 export const getMyDeliveries = async (tenantId: string, captainId: number) => {

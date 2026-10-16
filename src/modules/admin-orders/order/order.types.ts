@@ -30,6 +30,12 @@ export type AdminOrderDeliveryInfo = {
     email: string | null;
     phone: string;
   } | null;
+  previousCaptain?: {
+    id: number;
+    name: string;
+    email: string | null;
+    phone: string;
+  } | null;
   assignedAt: Date | null;
 };
 

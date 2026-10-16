@@ -10,13 +10,6 @@ const captainFields = {
   branchIds: z.array(z.string().trim().min(1)).optional(),
 };
 
-export const createCaptainSchema = z.object({
-  body: z.object({
-    ...captainFields,
-    password: z.string().min(8).max(100),
-  }),
-});
-
 export const updateCaptainSchema = z.object({
   params: z.object({ captainId: z.coerce.number().int().positive() }),
   body: z.object({

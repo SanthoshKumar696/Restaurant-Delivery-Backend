@@ -1,5 +1,7 @@
 # Captain Delivery Workflow API Report
 
+> Current account creation and pre-acceptance reassignment behavior has since been updated; see [STAFF_CAPTAIN_ASSIGNMENT_FIX_REPORT.md](./STAFF_CAPTAIN_ASSIGNMENT_FIX_REPORT.md).
+
 ## Gap Analysis
 
 - The existing Captain endpoints already reused staff JWT authentication and enforced Captain ownership and tenant scope for detail, acceptance, pickup, tracking, and completion.

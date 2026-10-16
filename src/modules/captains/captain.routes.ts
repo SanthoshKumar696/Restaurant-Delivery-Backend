@@ -3,7 +3,6 @@ import { requireAdminAuth } from "../../middlewares/admin-auth.middleware";
 import { requireCaptainAuth } from "../../middlewares/staff-auth.middleware";
 import { validate } from "../../middlewares/validate.middleware";
 import {
-  createCaptain,
   getAvailableCaptains,
   getCaptainAvailability,
   getCaptainById,
@@ -12,83 +11,13 @@ import {
   updateCaptain,
   updateCaptainAvailability,
 } from "./captain.controller";
-import { captainAvailabilitySchema, captainIdSchema, createCaptainSchema, updateCaptainSchema } from "./captain.validation";
+import { captainAvailabilitySchema, captainIdSchema, updateCaptainSchema } from "./captain.validation";
 
 const router = Router();
 
 /**
  * @swagger
  * /api/captains:
- *   post:
- *     summary: Create a Captain and linked staff login
- *     description: Requires an admin bearer token; tenant scope is taken from the authenticated admin. The response id is captainId and is also the linked StaffUser.id.
- *     tags: [Captains]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       description: Captain profile and staff-login fields. branchIds must come from branches belonging to the authenticated admin's tenant.
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - fullName
- *               - phone
- *               - email
- *               - password
- *             properties:
- *               fullName:
- *                 type: string
- *                 example: Captain One
- *               phone:
- *                 type: string
- *                 example: "9876543210"
- *               email:
- *                 type: string
- *                 format: email
- *                 example: captain.one@example.com
- *               password:
- *                 type: string
- *                 format: password
- *                 example: Captain@123
- *               isActive:
- *                 type: boolean
- *                 example: true
- *               vehicleType:
- *                 type: string
- *                 nullable: true
- *                 example: Bike
- *               vehicleNumber:
- *                 type: string
- *                 nullable: true
- *                 example: TN01AB1234
- *               branchIds:
- *                 type: array
- *                 items:
- *                   type: string
- *                 description: IDs of tenant branches to which this Captain is assigned.
- *                 example: ["T001-B001"]
- *     responses:
- *       201:
- *         description: Captain created successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   $ref: '#/components/schemas/CaptainProfile'
- *       400:
- *         description: Invalid Captain fields or branch IDs
- *       401:
- *         description: Admin authentication is required
- *       403:
- *         description: Branch does not belong to the authenticated tenant
- *       409:
- *         description: Phone number or email already exists for this tenant
  *   get:
  *     summary: List tenant Captains and their Captain IDs
  *     description: Requires an admin bearer token. Tenant scope comes from the authenticated admin. Each item's id is captainId, the ID to use when assigning a delivery or filtering GET /api/delivery/admin; it is also the linked StaffUser.id.
@@ -310,7 +239,6 @@ const router = Router();
  *       404:
  *         description: Captain not found in the authenticated tenant
  */
-router.post("/", requireAdminAuth, validate(createCaptainSchema), createCaptain);
 router.get("/", requireAdminAuth, getCaptains);
 router.get("/available", requireAdminAuth, getAvailableCaptains);
 router.get("/me", requireCaptainAuth, getMyCaptain);
