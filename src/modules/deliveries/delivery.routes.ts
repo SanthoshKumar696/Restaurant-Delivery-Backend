@@ -131,10 +131,18 @@ const router = Router();
  * /api/delivery/my-upcoming:
  *   get:
  *     summary: List assigned deliveries awaiting Captain acceptance
- *     description: No captainId parameter is accepted. The required staffAuth token identifies the Captain; obtain that Captain ID from GET /api/captains/me or the admin Captain list. Each returned delivery's deliveryId is the ID required by delivery detail and action routes.
+ *     description: The authenticated captain is used by default. You may optionally pass staffId as a query parameter to filter the data for a specific staff record.
  *     tags: [Deliveries]
  *     security:
  *       - staffAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: staffId
+ *         required: false
+ *         description: Optional staff ID filter. When omitted, the token's authenticated staffId is used.
+ *         schema:
+ *           type: integer
+ *           example: 438
  *     responses:
  *       200:
  *         description: Deliveries with ASSIGNED status for the authenticated Captain

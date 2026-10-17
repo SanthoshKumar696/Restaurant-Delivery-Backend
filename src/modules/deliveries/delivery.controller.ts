@@ -49,7 +49,13 @@ export const getMyDashboard = handle(async (req, res) => {
 });
 
 export const getMyUpcomingDeliveries = handle(async (req, res) => {
-  const data = await getMyUpcomingDeliveriesService(req.staff!.tenantId, req.staff!.staffId);
+  const staffId = req.query.staffId === undefined ? req.staff!.staffId : Number(req.query.staffId);
+
+  if (!Number.isInteger(staffId) || staffId <= 0) {
+    throw new HttpError("Invalid staffId", 400, "INVALID_STAFF_ID");
+  }
+
+  const data = await getMyUpcomingDeliveriesService(req.staff!.tenantId, staffId);
   return res.status(200).json({ success: true, message: "Upcoming deliveries fetched successfully", items: data });
 });
 

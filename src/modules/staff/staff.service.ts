@@ -81,6 +81,13 @@ const ensureCaptainHasNoActiveDeliveries = async (staffId: number, tenantId: str
  * CREATE STAFF USER
  */
 export const createStaff = async (data: CreateStaffInput) => {
+  const digits = data.phone.replace(/\D/g, "");
+  const normalizedPhone = digits.length === 12 && digits.startsWith("91")
+    ? digits.slice(2)
+    : digits.length === 11 && digits.startsWith("0")
+      ? digits.slice(1)
+      : digits;
+
   // Check tenant exists
   const tenant = await prisma.tenant.findUnique({
     where: {
@@ -97,7 +104,7 @@ export const createStaff = async (data: CreateStaffInput) => {
     where: {
       tenantId_phone: {
         tenantId: data.tenantId,
-        phone: data.phone,
+        phone: normalizedPhone,
       },
     },
   });
@@ -122,7 +129,7 @@ export const createStaff = async (data: CreateStaffInput) => {
       data: {
         tenantId: data.tenantId,
         fullName: data.fullName,
-        phone: data.phone,
+        phone: normalizedPhone,
         email,
         passwordHash,
         role: data.role,

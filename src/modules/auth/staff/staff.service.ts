@@ -5,16 +5,31 @@ import { HttpError } from "../../../common/errors/http-error";
 import { StaffRole } from "@prisma/client";
 import { normalizeStaffEmail } from "../../staff/staff-email";
 
+const normalizeStaffPhone = (value: string) => {
+  const digits = value.replace(/\D/g, "");
+
+  if (digits.length === 12 && digits.startsWith("91")) {
+    return digits.slice(2);
+  }
+
+  if (digits.length === 11 && digits.startsWith("0")) {
+    return digits.slice(1);
+  }
+
+  return digits.length === 10 ? digits : value.trim();
+};
+
 export const loginStaff = async (data: {
   identifier: string;
   password: string;
 }) => {
   const identifier = data.identifier.trim();
   const isEmail = identifier.includes("@");
+  const normalizedPhone = isEmail ? undefined : normalizeStaffPhone(identifier);
   const matchingStaff = await prisma.staffUser.findMany({
     where: isEmail
       ? { email: normalizeStaffEmail(identifier) }
-      : { phone: identifier },
+      : { phone: normalizedPhone },
     select: {
       id: true,
       tenantId: true,
